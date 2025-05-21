@@ -38,6 +38,37 @@ if not BOT_TOKEN:
     raise ValueError(err)
 
 
+async def play_sfx_loop(vc: discord.VoiceClient) -> None:
+    """Play random sound effects in a loop."""
+    if not vc.is_connected():
+        logger.warning("Voice client is not connected.")
+        return
+
+    while True:
+        wait = random.uniform(MIN_INTERVAL, MAX_INTERVAL)  # noqa: S311
+        await asyncio.sleep(wait)
+
+        sfx = random.choice(SOUND_FILES)  # noqa: S311
+
+        # create an event to signal when playback is done
+        done_event = anyio.Event()
+
+        def _after_play(
+            error: Exception | None,
+            sfx: str = sfx,
+            done_event: anyio.Event = done_event,
+        ) -> None:
+            """Callback function to be called after playback."""
+            if error:
+                logger.error("Error playing %s: %s", sfx, error)
+            done_event.set()
+
+        vc.play(discord.FFmpegPCMAudio(sfx), after=_after_play)
+
+        # wait for the track to finish
+        await done_event.wait()
+
+
 @bot.event
 async def on_ready() -> None:
     """Call when the bot is ready; synchronizes slash commands with Discord."""
@@ -74,35 +105,10 @@ async def leave(ctx: commands.Context[Any]) -> None:
         await ctx.send("I'm not in a voice channel.")
 
 
-async def play_sfx_loop(vc: discord.VoiceClient) -> None:
-    """Play random sound effects in a loop."""
-    if not vc.is_connected():
-        logger.warning("Voice client is not connected.")
-        return
-
-    while True:
-        wait = random.uniform(MIN_INTERVAL, MAX_INTERVAL)  # noqa: S311
-        await asyncio.sleep(wait)
-
-        sfx = random.choice(SOUND_FILES)  # noqa: S311
-
-        # create an event to signal when playback is done
-        done_event = anyio.Event()
-
-        def _after_play(
-            error: Exception | None,
-            sfx: str = sfx,
-            done_event: anyio.Event = done_event,
-        ) -> None:
-            """Callback function to be called after playback."""
-            if error:
-                logger.error("Error playing %s: %s", sfx, error)
-            done_event.set()
-
-        vc.play(discord.FFmpegPCMAudio(sfx), after=_after_play)
-
-        # wait for the track to finish
-        await done_event.wait()
+@bot.tree.command(name="ping")
+async def ping(interaction: discord.Interaction) -> None:
+    """Ping the bot to check if it's alive."""
+    await interaction.response.send_message("Pong!", ephemeral=True)
 
 
 @bot.tree.command(name="trigger", description="Manually play a random sound effect")

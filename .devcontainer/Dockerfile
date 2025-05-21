@@ -10,6 +10,7 @@ RUN apt-get update && \
         build-essential \
         ca-certificates \
         curl \
+        ffmpeg \
         git \
         libbz2-dev \
         libffi-dev \
