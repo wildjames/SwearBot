@@ -1,4 +1,4 @@
-import logging
+import logging  # noqa: I001, RUF100
 import os
 from typing import cast
 
@@ -6,7 +6,7 @@ import discord
 from discord.ext import commands
 from dotenv import load_dotenv
 
-from . import audio_jobs
+import audio_jobs
 
 load_dotenv()
 

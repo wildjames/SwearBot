@@ -2,20 +2,20 @@ import asyncio
 import contextlib
 import logging
 import random
+from pathlib import Path
 
 import anyio
 import discord
 
-# Configuration
-SOUND_FILES = [
-    "sounds/mlg/Damn Son Where_d You Find This - MLG Sound Effect (HD) ( 160kbps ).mp3",
-    "sounds/mlg/OH BABY A TRIPLE - MLG Sound Effects (HD) ( 160kbps ).mp3",
-    "sounds/mlg/MLG Horns - MLG Sound Effects (HD) ( 160kbps ).mp3",
-]
+SOUND_FILES = [str(p) for p in Path("sounds").rglob("*") if p.is_file()]
 MIN_INTERVAL = 5
-MAX_INTERVAL = 30
+MAX_INTERVAL = 15
 
 logger = logging.getLogger(__name__)
+
+logger.info(
+    "Loaded %d sound files from %s", len(SOUND_FILES), Path("sounds").absolute()
+)
 
 # Track active loops per guild: guild_id -> (VoiceClient, asyncio.Task)
 loop_tasks: dict[int, tuple[discord.VoiceClient, asyncio.Task[None]]] = {}
