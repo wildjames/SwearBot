@@ -1,8 +1,9 @@
 import asyncio
+import contextlib
 import logging
 import os
 import random
-from typing import Any, Dict, Tuple
+from typing import cast
 
 import anyio
 import discord
@@ -25,6 +26,7 @@ bot = commands.Bot(command_prefix="!", case_insensitive=True, intents=intents)
 SOUND_FILES = [
     "sounds/mlg/Damn Son Where_d You Find This - MLG Sound Effect (HD) ( 160kbps ).mp3",
     "sounds/mlg/OH BABY A TRIPLE - MLG Sound Effects (HD) ( 160kbps ).mp3",
+    "sounds/mlg/MLG Horns - MLG Sound Effects (HD) ( 160kbps ).mp3",
 ]
 
 MIN_INTERVAL = 5
@@ -37,24 +39,27 @@ if not BOT_TOKEN:
 
 # Keep track of one loop task per guild:
 # guild.id -> (VoiceClient, asyncio.Task)
-loop_tasks: Dict[int, Tuple[discord.VoiceClient, asyncio.Task]] = {}
+loop_tasks: dict[int, tuple[discord.VoiceClient, asyncio.Task[None]]] = {}
+
 
 async def play_sfx_loop(vc: discord.VoiceClient) -> None:
     """Play random sound effects in a loop until cancelled."""
     try:
         while True:
             # Pick a random delay
-            wait = random.uniform(MIN_INTERVAL, MAX_INTERVAL)
+            wait = random.uniform(MIN_INTERVAL, MAX_INTERVAL)  # noqa: S311
             await asyncio.sleep(wait)
 
             # Pick and play
-            sfx = random.choice(SOUND_FILES)
+            sfx = random.choice(SOUND_FILES)  # noqa: S311
             done_event = anyio.Event()
 
-            def _after_play(error: Exception | None) -> None:
+            def _after_play(
+                error: Exception | None, sfx: str = sfx, event: anyio.Event = done_event
+            ) -> None:
                 if error:
                     logger.error("Error playing %s: %s", sfx, error)
-                done_event.set()
+                event.set()
 
             vc.play(discord.FFmpegPCMAudio(sfx), after=_after_play)
             await done_event.wait()
@@ -74,6 +79,7 @@ async def on_ready() -> None:
 
 @bot.tree.command(name="start", description="Start random SFX in your voice channel")
 async def start(interaction: discord.Interaction) -> None:
+    """Join the user's voice channel and start playing random sound effects."""
     # Ensure this is used in a guild
     if interaction.guild is None:
         await interaction.response.send_message(
@@ -100,7 +106,7 @@ async def start(interaction: discord.Interaction) -> None:
 
     # Connect (or reuse existing VC)
     vc = interaction.guild.voice_client
-    if not vc or not vc.is_connected():
+    if not vc or not (isinstance(vc, discord.VoiceClient) and vc.is_connected()):
         vc = await member.voice.channel.connect()
 
     # Spin up the loop
@@ -114,6 +120,7 @@ async def start(interaction: discord.Interaction) -> None:
 
 @bot.tree.command(name="stop", description="Stop the random SFX loop")
 async def stop(interaction: discord.Interaction) -> None:
+    """Stop the random sound effect loop and disconnect from the voice channel."""
     if interaction.guild is None:
         await interaction.response.send_message(
             "This command only works in a server.", ephemeral=True
@@ -132,10 +139,8 @@ async def stop(interaction: discord.Interaction) -> None:
 
     # Cancel loop, disconnect
     task.cancel()
-    try:
+    with contextlib.suppress(asyncio.CancelledError):
         await task
-    except asyncio.CancelledError:
-        pass
 
     if vc.is_connected():
         await vc.disconnect(force=True)
@@ -148,11 +153,13 @@ async def stop(interaction: discord.Interaction) -> None:
 
 @bot.tree.command(name="ping")
 async def ping(interaction: discord.Interaction) -> None:
+    """Check if the bot is alive."""
     await interaction.response.send_message("Pong!", ephemeral=True)
 
 
 @bot.tree.command(name="trigger", description="Manually play a random sound effect")
 async def trigger(interaction: discord.Interaction) -> None:
+    """Play a random sound effect in the voice channel."""
     await interaction.response.defer(thinking=True)
     if interaction.guild is None:
         await interaction.followup.send(
@@ -172,8 +179,9 @@ async def trigger(interaction: discord.Interaction) -> None:
                 ephemeral=True,
             )
             return
+    sfx = random.choice(SOUND_FILES)  # noqa: S311
 
-    sfx = random.choice(SOUND_FILES)
+    vc = cast("discord.VoiceClient", vc)
     vc.play(
         discord.FFmpegPCMAudio(sfx),
         after=lambda e: logger.info("Finished %s: %s", sfx, e),
