@@ -1,14 +1,12 @@
-import asyncio
-import contextlib
 import logging
 import os
-import random
 from typing import cast
 
-import anyio
 import discord
 from discord.ext import commands
 from dotenv import load_dotenv
+
+from . import audio_jobs
 
 load_dotenv()
 
@@ -22,51 +20,10 @@ intents.voice_states = True
 
 bot = commands.Bot(command_prefix="!", case_insensitive=True, intents=intents)
 
-# Configuration
-SOUND_FILES = [
-    "sounds/mlg/Damn Son Where_d You Find This - MLG Sound Effect (HD) ( 160kbps ).mp3",
-    "sounds/mlg/OH BABY A TRIPLE - MLG Sound Effects (HD) ( 160kbps ).mp3",
-    "sounds/mlg/MLG Horns - MLG Sound Effects (HD) ( 160kbps ).mp3",
-]
-
-MIN_INTERVAL = 5
-MAX_INTERVAL = 30
-
 BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN")
 if not BOT_TOKEN:
-    err = "DISCORD_BOT_TOKEN environment variable not set."
+    err = "DISCORD_BOT_TOKEN environment variable is not set."
     raise ValueError(err)
-
-# Keep track of one loop task per guild:
-# guild.id -> (VoiceClient, asyncio.Task)
-loop_tasks: dict[int, tuple[discord.VoiceClient, asyncio.Task[None]]] = {}
-
-
-async def play_sfx_loop(vc: discord.VoiceClient) -> None:
-    """Play random sound effects in a loop until cancelled."""
-    try:
-        while True:
-            # Pick a random delay
-            wait = random.uniform(MIN_INTERVAL, MAX_INTERVAL)  # noqa: S311
-            await asyncio.sleep(wait)
-
-            # Pick and play
-            sfx = random.choice(SOUND_FILES)  # noqa: S311
-            done_event = anyio.Event()
-
-            def _after_play(
-                error: Exception | None, sfx: str = sfx, event: anyio.Event = done_event
-            ) -> None:
-                if error:
-                    logger.error("Error playing %s: %s", sfx, error)
-                event.set()
-
-            vc.play(discord.FFmpegPCMAudio(sfx), after=_after_play)
-            await done_event.wait()
-    except asyncio.CancelledError:
-        # Clean up if the task is cancelled
-        logger.info("SFX loop cancelled for %s", vc.guild.name)
-        raise
 
 
 @bot.event
@@ -87,15 +44,6 @@ async def start(interaction: discord.Interaction) -> None:
         )
         return
 
-    guild_id = interaction.guild.id
-
-    # Are we already running?
-    if guild_id in loop_tasks:
-        await interaction.response.send_message(
-            "SFX loop is already running in this server!", ephemeral=True
-        )
-        return
-
     # Get the member and their voice channel
     member = interaction.guild.get_member(interaction.user.id)
     if not member or not member.voice or not member.voice.channel:
@@ -103,19 +51,23 @@ async def start(interaction: discord.Interaction) -> None:
             "You need to be in a voice channel to start the loop.", ephemeral=True
         )
         return
+    if not isinstance(member.voice.channel, discord.VoiceChannel):
+        await interaction.response.send_message(
+            "Stage channels are not supported by the SFX loop.", ephemeral=True
+        )
+        return
 
-    # Connect (or reuse existing VC)
-    vc = interaction.guild.voice_client
-    if not vc or not (isinstance(vc, discord.VoiceClient) and vc.is_connected()):
-        vc = await member.voice.channel.connect()
-
-    # Spin up the loop
-    task = bot.loop.create_task(play_sfx_loop(vc))
-    loop_tasks[guild_id] = (vc, task)
-
-    await interaction.response.send_message(
-        f"🎶 Started SFX loop in **{member.voice.channel.name}**.", ephemeral=True
-    )
+    # Connect to voice and start loop
+    vc = await audio_jobs.ensure_connected(interaction.guild, member.voice.channel)
+    try:
+        await audio_jobs.start_loop(vc)
+        await interaction.response.send_message(
+            f"🎶 Started SFX loop in **{member.voice.channel.name}**.", ephemeral=True
+        )
+    except RuntimeError:
+        await interaction.response.send_message(
+            "SFX loop is already running in this server!", ephemeral=True
+        )
 
 
 @bot.tree.command(name="stop", description="Stop the random SFX loop")
@@ -127,28 +79,15 @@ async def stop(interaction: discord.Interaction) -> None:
         )
         return
 
-    guild_id = interaction.guild.id
-    data = loop_tasks.get(guild_id)
-    if not data:
+    try:
+        await audio_jobs.stop_loop(interaction.guild)
+        await interaction.response.send_message(
+            "Stopped the SFX loop and left the channel.", ephemeral=True
+        )
+    except KeyError:
         await interaction.response.send_message(
             "No SFX loop is currently running here.", ephemeral=True
         )
-        return
-
-    vc, task = data
-
-    # Cancel loop, disconnect
-    task.cancel()
-    with contextlib.suppress(asyncio.CancelledError):
-        await task
-
-    if vc.is_connected():
-        await vc.disconnect(force=True)
-
-    del loop_tasks[guild_id]
-    await interaction.response.send_message(
-        "Stopped the SFX loop and left the channel.", ephemeral=True
-    )
 
 
 @bot.tree.command(name="ping")
@@ -179,13 +118,9 @@ async def trigger(interaction: discord.Interaction) -> None:
                 ephemeral=True,
             )
             return
-    sfx = random.choice(SOUND_FILES)  # noqa: S311
 
     vc = cast("discord.VoiceClient", vc)
-    vc.play(
-        discord.FFmpegPCMAudio(sfx),
-        after=lambda e: logger.info("Finished %s: %s", sfx, e),
-    )
+    sfx = await audio_jobs.trigger_sfx(vc)
     await interaction.followup.send(f"🔊 Playing **{sfx}**!", ephemeral=True)
 
 
