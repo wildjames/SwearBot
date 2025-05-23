@@ -8,6 +8,8 @@ from pathlib import Path
 import anyio
 import discord
 
+import utils
+
 # Load all sound files from the sounds directory
 SOUND_FILES = [str(p) for p in Path("sounds").rglob("*") if p.is_file()]
 logger = logging.getLogger(__name__)
@@ -50,22 +52,17 @@ async def _play_sfx_loop(vc: discord.VoiceClient, job_id: str) -> None:
 
             done_event = anyio.Event()
 
-            def _after_play(
-                error: Exception | None,
-                sound: str = sound,
-                event: anyio.Event = done_event,
-            ) -> None:
-                if error:
-                    logger.error("Error playing %s: %s", sound, error)
-                event.set()
+            def _after_play(done_event: anyio.Event = done_event) -> None:
+                done_event.set()
 
-            # TODO: I need to figure out how to play mulitple audios at once
             try:
-                vc.play(discord.FFmpegPCMAudio(sound), after=_after_play)
-            except discord.ClientException:
+                mixer = await utils.get_mixer_from_voice_client(vc)
+                mixer.play_file(sound, after_play=_after_play)
+            except Exception:
                 logger.exception("Error playing %s", sound)
                 await remove_job(job_id)
                 return
+
             await done_event.wait()
     except asyncio.CancelledError:
         logger.info("SFX job %s cancelled in guild_id=%s", job_id, vc.guild.id)
@@ -73,7 +70,10 @@ async def _play_sfx_loop(vc: discord.VoiceClient, job_id: str) -> None:
 
 
 async def add_job(
-    vc: discord.VoiceClient, sound: str, min_interval: float, max_interval: float
+    vc: discord.VoiceClient,
+    sound: str,
+    min_interval: float,
+    max_interval: float,
 ) -> str:
     """Start a new SFX job for a specific sound and interval; returns job_id."""
     job_id = uuid.uuid4().hex
@@ -105,17 +105,6 @@ async def remove_job(job_id: str) -> None:
     logger.info(
         "Stopped SFX job %s for sound %s in guild_id=%s", job_id, sound, vc.guild.id
     )
-
-
-async def trigger_sfx(vc: discord.VoiceClient) -> str:
-    """Play one random SFX immediately. Returns the filename."""
-    sound = random.choice(SOUND_FILES)  # noqa: S311
-    vc.play(
-        discord.FFmpegPCMAudio(sound),
-        after=lambda e: logger.info("Finished %s: %s", sound, e),
-    )
-    logger.info("Triggered SFX %s on guild_id=%s", sound, vc.guild.id)
-    return sound
 
 
 async def ensure_connected(

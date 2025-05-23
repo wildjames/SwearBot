@@ -1,6 +1,7 @@
 import logging  # noqa: I001, RUF100
 import os
-from typing import cast
+from pathlib import Path
+import random
 
 import discord
 from discord.ext import commands
@@ -8,6 +9,7 @@ from discord import app_commands
 from dotenv import load_dotenv
 
 import audio_jobs
+import utils
 
 load_dotenv()
 
@@ -124,7 +126,7 @@ async def listjobs(interaction: discord.Interaction) -> None:
         )
 
 
-@bot.tree.command(name="ping")
+@bot.tree.command(name="ping", description="Check if the bot is alive")
 async def ping(interaction: discord.Interaction) -> None:
     """Check if the bot is alive."""
     await interaction.response.send_message("Pong!", ephemeral=True)
@@ -140,22 +142,13 @@ async def trigger(interaction: discord.Interaction) -> None:
         )
         return
 
-    vc = interaction.guild.voice_client
-    if not vc:
-        member = interaction.guild.get_member(interaction.user.id)
-        if member and member.voice and member.voice.channel:
-            vc = await member.voice.channel.connect()
-        else:
-            await interaction.followup.send(
-                "You need to be in a voice channel (or have me already in one)"
-                " to trigger a sound.",
-                ephemeral=True,
-            )
-            return
-
-    vc = cast("discord.VoiceClient", vc)
-    sfx = await audio_jobs.trigger_sfx(vc)
-    await interaction.followup.send(f"🔊 Playing **{sfx}**!", ephemeral=True)
+    # pick & fire off the effect
+    sound = random.choice(audio_jobs.SOUND_FILES)  # noqa: S311
+    mixer = await utils.get_mixer_from_interaction(interaction)
+    mixer.play_file(sound)
+    await interaction.followup.send(
+        f"🔊 Playing **{Path(sound).name}**!", ephemeral=True
+    )
 
 
 # Run the bot
