@@ -4,6 +4,7 @@ from typing import cast
 
 import discord
 from discord.ext import commands
+from discord import app_commands
 from dotenv import load_dotenv
 
 import audio_jobs
@@ -22,57 +23,66 @@ bot = commands.Bot(command_prefix="!", case_insensitive=True, intents=intents)
 
 BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN")
 if not BOT_TOKEN:
-    err = "DISCORD_BOT_TOKEN environment variable is not set."
-    raise ValueError(err)
+    msg = "DISCORD_BOT_TOKEN environment variable is not set."
+    raise ValueError(msg)
 
 
 @bot.event
 async def on_ready() -> None:
     """Call when the bot is ready; synchronizes slash commands with Discord."""
-    # Sync slash commands with Discord
     await bot.tree.sync()
     logger.info("Logged in as %s", bot.user)
 
 
-@bot.tree.command(name="start", description="Start random SFX in your voice channel")
-async def start(interaction: discord.Interaction) -> None:
-    """Join the user's voice channel and start playing random sound effects."""
-    # Ensure this is used in a guild
+@bot.tree.command(name="addjob", description="Add a scheduled SFX job")
+@app_commands.describe(
+    sound="Filename of the sound effect (including extension)",
+    min_interval="Minimum seconds between plays",
+    max_interval="Maximum seconds between plays",
+)
+async def addjob(
+    interaction: discord.Interaction,
+    sound: str,
+    min_interval: float,
+    max_interval: float,
+) -> None:
+    """Add a scheduled sound effect (SFX) job to the server."""
     if interaction.guild is None:
         await interaction.response.send_message(
             "This command only works in a server.", ephemeral=True
         )
         return
 
-    # Get the member and their voice channel
     member = interaction.guild.get_member(interaction.user.id)
-    if not member or not member.voice or not member.voice.channel:
+    if (
+        not member
+        or not member.voice
+        or not member.voice.channel
+        or not isinstance(member.voice.channel, discord.VoiceChannel)
+    ):
         await interaction.response.send_message(
-            "You need to be in a voice channel to start the loop.", ephemeral=True
-        )
-        return
-    if not isinstance(member.voice.channel, discord.VoiceChannel):
-        await interaction.response.send_message(
-            "Stage channels are not supported by the SFX loop.", ephemeral=True
+            "You need to be in a standard voice channel to add a job.", ephemeral=True
         )
         return
 
-    # Connect to voice and start loop
     vc = await audio_jobs.ensure_connected(interaction.guild, member.voice.channel)
     try:
-        await audio_jobs.start_loop(vc)
-        await interaction.response.send_message(
-            f"🎶 Started SFX loop in **{member.voice.channel.name}**.", ephemeral=True
+        job_id = await audio_jobs.add_job(vc, sound, min_interval, max_interval)
+        message = (
+            f"✅ Added job `{job_id}`: `{sound}` "
+            f"every {min_interval:.1f}-{max_interval:.1f}s."
         )
-    except RuntimeError:
+        await interaction.response.send_message(message, ephemeral=True)
+    except ValueError as e:
         await interaction.response.send_message(
-            "SFX loop is already running in this server!", ephemeral=True
+            f"Failed to add job: {e}", ephemeral=True
         )
 
 
-@bot.tree.command(name="stop", description="Stop the random SFX loop")
-async def stop(interaction: discord.Interaction) -> None:
-    """Stop the random sound effect loop and disconnect from the voice channel."""
+@bot.tree.command(name="removejob", description="Remove a scheduled SFX job")
+@app_commands.describe(job_id="The ID of the job to remove")
+async def removejob(interaction: discord.Interaction, job_id: str) -> None:
+    """Remove a scheduled SFX job using its job identifier."""
     if interaction.guild is None:
         await interaction.response.send_message(
             "This command only works in a server.", ephemeral=True
@@ -80,13 +90,37 @@ async def stop(interaction: discord.Interaction) -> None:
         return
 
     try:
-        await audio_jobs.stop_loop(interaction.guild)
+        await audio_jobs.remove_job(job_id)
         await interaction.response.send_message(
-            "Stopped the SFX loop and left the channel.", ephemeral=True
+            f"🗑️ Removed job `{job_id}`.", ephemeral=True
         )
     except KeyError:
         await interaction.response.send_message(
-            "No SFX loop is currently running here.", ephemeral=True
+            f"No job found with ID `{job_id}`.", ephemeral=True
+        )
+
+
+@bot.tree.command(name="listjobs", description="List active SFX jobs")
+async def listjobs(interaction: discord.Interaction) -> None:
+    """Send a list of active jobs in the server."""
+    if interaction.guild is None:
+        await interaction.response.send_message(
+            "This command only works in a server.", ephemeral=True
+        )
+        return
+
+    jobs: list[str] = []
+    for jid, (vc, _task, sound, mi, ma) in audio_jobs.loop_jobs.items():
+        if vc.guild.id == interaction.guild.id:
+            jobs.append(f"`{jid}`: `{sound}` every {mi:.1f}-{ma:.1f}s")
+
+    if not jobs:
+        await interaction.response.send_message(
+            "No active jobs in this server.", ephemeral=True
+        )
+    else:
+        await interaction.response.send_message(
+            "**Active jobs:**\n" + "\n".join(jobs), ephemeral=True
         )
 
 

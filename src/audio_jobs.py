@@ -2,90 +2,120 @@ import asyncio
 import contextlib
 import logging
 import random
+import uuid
 from pathlib import Path
 
 import anyio
 import discord
 
+# Load all sound files from the sounds directory
 SOUND_FILES = [str(p) for p in Path("sounds").rglob("*") if p.is_file()]
-MIN_INTERVAL = 5
-MAX_INTERVAL = 15
-
 logger = logging.getLogger(__name__)
-
 logger.info(
     "Loaded %d sound files from %s", len(SOUND_FILES), Path("sounds").absolute()
 )
 
-# Track active loops per guild: guild_id -> (VoiceClient, asyncio.Task)
-loop_tasks: dict[int, tuple[discord.VoiceClient, asyncio.Task[None]]] = {}
+# Track active jobs:
+#   job_id -> (VoiceClient, asyncio.Task, sound_file, min_interval, max_interval)
+loop_jobs: dict[
+    str, tuple[discord.VoiceClient, asyncio.Task[None], str, float, float]
+] = {}
 
 
-async def _play_sfx_loop(vc: discord.VoiceClient) -> None:
-    """Internal loop: play random SFX until cancelled."""
+async def _play_sfx_loop(vc: discord.VoiceClient, job_id: str) -> None:
+    """Internal loop: play the given SFX on its own schedule.
+
+    This function is run in a separate task and will be cancelled when the
+    job is removed. It will also stop if the voice client disconnects.
+    """
     try:
         while True:
-            wait = random.uniform(MIN_INTERVAL, MAX_INTERVAL)  # noqa: S311
+            data = loop_jobs.get(job_id)
+            if not data:
+                logger.info("SFX job %s not found in guild_id=%s", job_id, vc.guild.id)
+                break
+            _, _, sound, min_interval, max_interval = data
+
+            if not vc.is_connected():
+                logger.info(
+                    "SFX job %s: voice client not connected in guild_id=%s",
+                    job_id,
+                    vc.guild.id,
+                )
+                await remove_job(job_id)
+                return
+
+            wait = random.uniform(min_interval, max_interval)  # noqa: S311
             await asyncio.sleep(wait)
 
-            sfx = random.choice(SOUND_FILES)  # noqa: S311
             done_event = anyio.Event()
 
             def _after_play(
-                error: Exception | None, sfx: str = sfx, event: anyio.Event = done_event
+                error: Exception | None,
+                sound: str = sound,
+                event: anyio.Event = done_event,
             ) -> None:
                 if error:
-                    logger.error("Error playing %s: %s", sfx, error)
+                    logger.error("Error playing %s: %s", sound, error)
                 event.set()
 
-            vc.play(discord.FFmpegPCMAudio(sfx), after=_after_play)
+            # TODO: I need to figure out how to play mulitple audios at once
+            try:
+                vc.play(discord.FFmpegPCMAudio(sound), after=_after_play)
+            except discord.ClientException:
+                logger.exception("Error playing %s", sound)
+                await remove_job(job_id)
+                return
             await done_event.wait()
     except asyncio.CancelledError:
-        logger.info("SFX loop cancelled for guild_id=%s", vc.guild.id)
+        logger.info("SFX job %s cancelled in guild_id=%s", job_id, vc.guild.id)
         raise
 
 
-async def start_loop(vc: discord.VoiceClient) -> None:
-    """Start the SFX loop on a connected VoiceClient."""
-    guild_id = vc.guild.id
-    if guild_id in loop_tasks:
-        err = "Loop already running for this guild"
-        raise RuntimeError(err)
+async def add_job(
+    vc: discord.VoiceClient, sound: str, min_interval: float, max_interval: float
+) -> str:
+    """Start a new SFX job for a specific sound and interval; returns job_id."""
+    job_id = uuid.uuid4().hex
+    task = vc.loop.create_task(_play_sfx_loop(vc, job_id))
+    loop_jobs[job_id] = (vc, task, sound, min_interval, max_interval)
+    logger.info(
+        "Started SFX job %s for sound %s in guild_id=%s", job_id, sound, vc.guild.id
+    )
+    return job_id
 
-    task = vc.loop.create_task(_play_sfx_loop(vc))
-    loop_tasks[guild_id] = (vc, task)
-    logger.info("Started SFX loop for guild_id=%s", guild_id)
 
-
-async def stop_loop(guild: discord.Guild) -> None:
-    """Stop and remove the SFX loop for a guild."""
-    guild_id = guild.id
-    data = loop_tasks.get(guild_id)
+async def remove_job(job_id: str) -> None:
+    """Stop and remove the SFX job by its job_id."""
+    data = loop_jobs.get(job_id)
     if not data:
-        err = "No active loop for this guild"
-        raise KeyError(err)
-
-    vc, task = data
+        msg = f"No active job with id {job_id}"
+        raise KeyError(msg)
+    vc, task, sound, *_ = data
     task.cancel()
     with contextlib.suppress(asyncio.CancelledError):
         await task
 
-    if vc.is_connected():
+    # Optionally disconnect if no other jobs for this guild remain
+    check = [j_vc.guild.id == vc.guild.id for j_vc, *_ in loop_jobs.values()]
+    if vc.is_connected() and not any(check):
         await vc.disconnect(force=True)
 
-    del loop_tasks[guild_id]
-    logger.info("Stopped SFX loop for guild_id=%s", guild_id)
+    del loop_jobs[job_id]
+    logger.info(
+        "Stopped SFX job %s for sound %s in guild_id=%s", job_id, sound, vc.guild.id
+    )
 
 
 async def trigger_sfx(vc: discord.VoiceClient) -> str:
     """Play one random SFX immediately. Returns the filename."""
-    sfx = random.choice(SOUND_FILES)  # noqa: S311
+    sound = random.choice(SOUND_FILES)  # noqa: S311
     vc.play(
-        discord.FFmpegPCMAudio(sfx),
-        after=lambda e: logger.info("Finished %s: %s", sfx, e),
+        discord.FFmpegPCMAudio(sound),
+        after=lambda e: logger.info("Finished %s: %s", sound, e),
     )
-    logger.info("Triggered SFX %s on guild_id=%s", sfx, vc.guild.id)
-    return sfx
+    logger.info("Triggered SFX %s on guild_id=%s", sound, vc.guild.id)
+    return sound
 
 
 async def ensure_connected(
