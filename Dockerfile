@@ -1,46 +1,40 @@
-FROM debian:bookworm-slim AS builder
-WORKDIR /opt
+FROM python:3.12-slim
 
-ENV PYENV_ROOT="/opt/.pyenv"
-ENV PATH="$PYENV_ROOT/shims:$PYENV_ROOT/bin:$PATH"
+ENV POETRY_VERSION=1.8.2 \
+    POETRY_VIRTUALENVS_CREATE=false \
+    PYTHONUNBUFFERED=1
 
-# hadolint ignore=DL3008
+WORKDIR /app
+
+# system deps for building wheels
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        build-essential \
-        ca-certificates \
-        curl \
-        ffmpeg \
-        git \
-        libbz2-dev \
-        libffi-dev \
-        liblzma-dev \
-        libncurses5-dev \
-        libreadline-dev \
-        libsqlite3-dev \
-        libssl-dev \
-        make \
-        zlib1g-dev
+        build-essential=12.9 \
+        ca-certificates=20230311 \
+        curl=7.88.1-10+deb12u12 \
+        ffmpeg=7:5.1.6-0+deb12u1 \
+        make=4.3-4.1 \
+        unzip=6.0-28 \
+    && rm -rf /var/lib/apt/lists/*
 
-SHELL [ "/bin/bash", "-o", "pipefail", "-c" ]
-RUN curl https://pyenv.run | bash
+RUN pip install --no-cache-dir "poetry==$POETRY_VERSION"
 
-COPY ./.python-version ./pyproject.toml ./poetry* /opt/
-RUN pyenv install "$(cat .python-version)" && \
-    pyenv global "$(cat .python-version)"
+# copy poetry files and install only prod deps
+COPY pyproject.toml poetry.lock* /app/
+RUN poetry install --no-root --no-dev
 
-# hadolint ignore=DL3013
-RUN pip install --no-cache-dir poetry && \
-    poetry config virtualenvs.create false && \
-    poetry install --no-root && \
-    rm -rf ~/.cache
+WORKDIR /app
 
+# entrypoint script
+COPY start.sh /usr/local/bin/start.sh
+RUN chmod +x /usr/local/bin/start.sh
 
-FROM mcr.microsoft.com/devcontainers/base:bookworm
-COPY --from=builder /opt/.pyenv /opt/.pyenv
+# bring in the zip so we can unpack at runtime
+COPY sounds.zip /app/sounds.zip
+COPY Makefile /app/Makefile
+RUN make unpack
 
-ENV PYENV_ROOT="/opt/.pyenv"
-ENV PATH="$PYENV_ROOT/shims:$PYENV_ROOT/bin:$PATH"
-ENV PYTHONUNBUFFERED=True
+COPY . /app
 
-RUN chown -R vscode $PYENV_ROOT
+# default command
+ENTRYPOINT ["start.sh"]

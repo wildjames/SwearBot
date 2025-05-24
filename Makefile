@@ -10,7 +10,7 @@ run:
 	poetry run python src/main.py
 
 unpack:
-	unzip sounds.zip
+	unzip -u sounds.zip
 
 clean:
 	@echo "Cleaning up..."
@@ -21,3 +21,11 @@ clean:
 	rm -rf .ruff_cache
 	# Remove build artifacts
 	rm -rf build/ dist/ *.egg-info
+
+docker-build:
+	docker build -t swearbot:latest .
+
+docker-run:
+	docker run --rm -it swearbot:latest
+
+docker-brun: docker-build docker-run
