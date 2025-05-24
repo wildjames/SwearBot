@@ -1,12 +1,13 @@
+# type: ignore
 import array
 import shutil
 import subprocess
 
 import pytest
 
-from ..src.multi_audio_source import (  # noqa: TID252
+from ..src.multi_audio_source import (
     MultiAudioSource,
-    _mixers,  # type: ignore - This is a test file, so it's fine
+    _mixers,
     ensure_mixer,
 )
 
@@ -18,14 +19,18 @@ def test_is_opus_returns_false():
 
 def test_mix_samples_combines_and_clears_tracks():
     src = MultiAudioSource()
+
     # Use small chunk size for testing (8 bytes -> 4 samples)
     src.CHUNK_SIZE = 8
     track1 = {"samples": array.array("h", [1, 1, 1, 1]), "pos": 0}
     track2 = {"samples": array.array("h", [2, 2, 2, 2]), "pos": 0}
     total, new_tracks = src._mix_samples([track1, track2])
+
+    # The sum needs to be an int16 array
     assert isinstance(total, array.array)
     assert total.typecode == "i"
     assert list(total) == [3, 3, 3, 3]
+
     # Both tracks reached end, so new_tracks should be empty
     assert new_tracks == []
 

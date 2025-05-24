@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "A discord bot that punishes cussing"
 authors = ["James Wild <wild.james343@gmail.com>"]
 license = "MIT"
-package-mode = false
+packages = [{include="src"}]
 
 [tool.poetry.dependencies]
 python = "^3.10"
@@ -12,11 +12,11 @@ python = "^3.10"
 anyio = "^4.9.0"
 dotenv = "^0.9.9"
 pynacl = "^1.5.0"
+
+[tool.poetry.group.dev.dependencies]
 ruff = "^0.11.11"
 pytest = "^8.3.5"
 pytest-asyncio = "^0.26.0"
-
-[tool.poetry.group.dev.dependencies]
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

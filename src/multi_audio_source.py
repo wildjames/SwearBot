@@ -45,12 +45,9 @@ class MultiAudioSource(AudioSource):
 
     def __init__(self) -> None:
         """Initializes a new MultiAudioSource instance."""
-        # protect track list against concurrent playFile() calls
+        # protect track list against concurrent play_file() calls
         self._lock = threading.Lock()
         self._tracks: list[Track] = []
-        self._stopped = False
-        # protect track list against concurrent playFile() calls
-        self._lock = threading.Lock()
         self._stopped = False
 
     def is_opus(self) -> bool:

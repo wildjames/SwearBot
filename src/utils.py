@@ -2,7 +2,7 @@ from typing import cast
 
 import discord
 
-from multi_audio_source import MultiAudioSource, ensure_mixer
+from .multi_audio_source import MultiAudioSource, ensure_mixer
 
 
 async def get_mixer_from_interaction(

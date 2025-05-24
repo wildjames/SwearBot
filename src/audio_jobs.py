@@ -8,7 +8,7 @@ from pathlib import Path
 import anyio
 import discord
 
-import utils
+from . import utils
 
 # Load all sound files from the sounds directory
 SOUND_FILES = [str(p) for p in Path("sounds").rglob("*") if p.is_file()]

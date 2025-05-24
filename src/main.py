@@ -8,8 +8,8 @@ from discord.ext import commands
 from discord import app_commands
 from dotenv import load_dotenv
 
-import audio_jobs
-import utils
+from . import audio_jobs
+from . import utils
 
 load_dotenv()
 
