@@ -67,7 +67,7 @@ async def addjob(
         )
         return
 
-    vc = await audio_jobs.ensure_connected(interaction.guild, member.voice.channel)
+    vc = await utils.ensure_connected(interaction.guild, member.voice.channel)
     try:
         job_id = await audio_jobs.add_job(vc, sound, min_interval, max_interval)
         message = (

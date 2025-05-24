@@ -106,13 +106,3 @@ async def remove_job(job_id: str) -> None:
     check = [j_vc.guild.id == vc.guild.id for j_vc, *_ in loop_jobs.values()]
     if vc.is_connected() and not any(check):
         await vc.disconnect(force=True)
-
-
-async def ensure_connected(
-    guild: discord.Guild, channel: discord.VoiceChannel
-) -> discord.VoiceClient:
-    """Connect to voice or reuse existing connection."""
-    vc = guild.voice_client
-    if not vc or not isinstance(vc, discord.VoiceClient) or not vc.is_connected():
-        vc = await channel.connect()
-    return vc

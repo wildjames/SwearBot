@@ -3,6 +3,9 @@
 install:
 	poetry install
 
+install-dev:
+	poetry install --all-groups
+
 lint:
 	ruff check .
 

@@ -8,7 +8,6 @@ from src.audio_jobs import (
     loop_jobs,
     add_job,
     remove_job,
-    ensure_connected,
     _play_sfx_loop,
 )
 from src import utils
@@ -81,13 +80,13 @@ async def test_ensure_connected_existing(monkeypatch):
     vc = DummyVC(guild_id=2, connected=True)
     guild = DummyGuild(id=2, vc=vc)
     channel = DummyChannel(vc)
-    out = await ensure_connected(guild, channel)
+    out = await utils.ensure_connected(guild, channel)
     assert out is vc
     # Case 2: no vc
     guild2 = DummyGuild(id=3, vc=None)
     new_vc = DummyVC(guild_id=3, connected=False)
     channel2 = DummyChannel(new_vc)
-    out2 = await ensure_connected(guild2, channel2)
+    out2 = await utils.ensure_connected(guild2, channel2)
     assert out2 is new_vc
 
 @pytest.mark.asyncio

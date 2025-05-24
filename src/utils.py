@@ -5,6 +5,16 @@ import discord
 from .multi_audio_source import MultiAudioSource, ensure_mixer
 
 
+async def ensure_connected(
+    guild: discord.Guild, channel: discord.VoiceChannel
+) -> discord.VoiceClient:
+    """Connect to voice or reuse existing connection."""
+    vc = guild.voice_client
+    if not vc or not isinstance(vc, discord.VoiceClient) or not vc.is_connected():
+        vc = await channel.connect()
+    return vc
+
+
 async def get_mixer_from_interaction(
     interaction: discord.Interaction,
 ) -> MultiAudioSource:
