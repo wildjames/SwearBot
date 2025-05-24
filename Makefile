@@ -10,7 +10,7 @@ build:
 	poetry build
 
 run:
-	poetry run python src/main.py
+	poetry run swearbot
 
 unpack:
 	unzip -u sounds.zip

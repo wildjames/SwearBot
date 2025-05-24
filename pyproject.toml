@@ -6,6 +6,9 @@ authors = ["James Wild <wild.james343@gmail.com>"]
 license = "MIT"
 packages = [{include="src"}]
 
+[tool.poetry.scripts]
+swearbot = "src.main:start"
+
 [tool.poetry.dependencies]
 python = "^3.10"
 "discord.py" = "^2.5.2"

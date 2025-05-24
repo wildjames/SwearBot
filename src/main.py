@@ -151,5 +151,13 @@ async def trigger(interaction: discord.Interaction) -> None:
     )
 
 
-# Run the bot
-bot.run(BOT_TOKEN)
+def start() -> None:
+    """Start the bot."""
+    if not BOT_TOKEN:
+        msg = "DISCORD_BOT_TOKEN environment variable is not set."
+        raise ValueError(msg)
+    bot.run(BOT_TOKEN)
+
+
+if __name__ == "__main__":
+    start()
