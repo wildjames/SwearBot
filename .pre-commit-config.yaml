@@ -27,5 +27,4 @@ repos:
         name: Run tests
         entry: make test
         language: system
-        pass_filenames: false
         stages: [pre-commit]
