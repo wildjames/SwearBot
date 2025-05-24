@@ -92,19 +92,20 @@ async def remove_job(job_id: str) -> None:
         msg = f"No active job with id {job_id}"
         raise KeyError(msg)
     vc, task, sound, *_ = data
+
     task.cancel()
     with contextlib.suppress(asyncio.CancelledError):
         await task
-
-    # Optionally disconnect if no other jobs for this guild remain
-    check = [j_vc.guild.id == vc.guild.id for j_vc, *_ in loop_jobs.values()]
-    if vc.is_connected() and not any(check):
-        await vc.disconnect(force=True)
 
     del loop_jobs[job_id]
     logger.info(
         "Stopped SFX job %s for sound %s in guild_id=%s", job_id, sound, vc.guild.id
     )
+
+    # Optionally disconnect if no other jobs for this guild remain
+    check = [j_vc.guild.id == vc.guild.id for j_vc, *_ in loop_jobs.values()]
+    if vc.is_connected() and not any(check):
+        await vc.disconnect(force=True)
 
 
 async def ensure_connected(
