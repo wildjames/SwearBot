@@ -29,3 +29,6 @@ docker-run:
 	docker run --rm -it swearbot:latest
 
 docker-brun: docker-build docker-run
+
+test:
+	pytest -v

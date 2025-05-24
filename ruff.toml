@@ -20,6 +20,7 @@ exclude = [
     ".vscode",
     "__pypackages__",
     "_build",
+    "tests/",
     "buck-out",
     "build",
     "dist",
