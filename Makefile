@@ -31,4 +31,4 @@ docker-run:
 docker-brun: docker-build docker-run
 
 test:
-	pytest -v
+	poetry run pytest -v
