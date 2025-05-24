@@ -6,6 +6,9 @@ install:
 lint:
 	ruff check .
 
+build:
+	poetry build
+
 run:
 	poetry run python src/main.py
 

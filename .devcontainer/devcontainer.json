@@ -56,6 +56,6 @@
             }
         }
     },
-    "postStartCommand": "pre-commit install",
+    "postStartCommand": "pre-commit install; make install",
     "remoteUser": "vscode"
 }

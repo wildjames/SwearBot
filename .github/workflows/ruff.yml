@@ -25,7 +25,7 @@ jobs:
           pip install poetry
 
       - name: Set up Dependencies
-        run: poetry install --no-interaction
+        run: make install
 
       - name: Format
         run: poetry run ruff format . --check --diff

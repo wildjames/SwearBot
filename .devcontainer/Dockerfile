@@ -32,7 +32,7 @@ RUN pyenv install "$(cat .python-version)" && \
 # hadolint ignore=DL3013
 RUN pip install --no-cache-dir poetry && \
     poetry config virtualenvs.create false && \
-    poetry install --no-root && \
+    poetry install --no-root --all-groups && \
     rm -rf ~/.cache
 
 
