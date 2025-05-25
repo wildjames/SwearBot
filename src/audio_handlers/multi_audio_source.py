@@ -9,7 +9,10 @@ from typing import TypedDict
 
 from discord import AudioSource, VoiceClient
 
-from src.audio_handlers.youtube_audio import extract_audio_pcm
+from src.audio_handlers.youtube_audio import (
+    fetch_audio_pcm,
+    get_audio_pcm,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -183,35 +186,34 @@ class MultiAudioSource(AudioSource):
         password: str | None = None,
         after_play: Callable[[], None] | None = None,
     ) -> None:
-        """Plays a YouTube video by extracting its audio and queuing it for mixing."""
-        logger.info("Playing YouTube URL %s", url)
+        """Queues a YouTube audio track for playback after decoding."""
+        logger.info("Queueing YouTube %s", url)
 
-        # extract audio from YouTube URL
-        pcm_data = await extract_audio_pcm(
+        # Check if the URL is already cached, await for fetch if not
+        await fetch_audio_pcm(
             url,
             sample_rate=self.SAMPLE_RATE,
             channels=self.CHANNELS,
             username=username,
             password=password,
         )
-        logger.info(
-            "Extracted audio (%d bytes) from YouTube URL %s",
-            len(pcm_data),
-            url,
-        )
 
-        # convert bytes to array of int16 samples
+        # read back from disk
+        pcm = get_audio_pcm(url)
+        if pcm is None:
+            msg = f"Cached file for {url} missing"
+            raise RuntimeError(msg)
+
+        # Make sure we play 16bit PCM data
         samples = array.array("h")
-        samples.frombytes(pcm_data)
+        samples.frombytes(pcm)
 
-        # enqueue the track
         with self._lock:
             self._tracks.append(
                 {"samples": samples, "pos": 0, "after_play": after_play}
             )
-
         self._stopped = False
-        logger.info("There are now %d tracks in the mixer", len(self._tracks))
+        logger.info("Now %d tracks in mixer", len(self._tracks))
 
     def play_file(
         self, filename: str, after_play: Callable[[], None] | None = None

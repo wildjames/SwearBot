@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 import random
@@ -189,42 +190,19 @@ async def trigger_sfx(interaction: discord.Interaction) -> None:
 
 
 @bot.tree.command(name="play", description="Enqueue and play a YouTube video audio")
-@app_commands.describe(
-    url="YouTube video URL",
-)
-async def play(
-    interaction: discord.Interaction,
-    url: str,
-) -> None:
+@app_commands.describe(url="YouTube video URL")
+async def play(interaction: discord.Interaction, url: str) -> None:
     """Enqueue a YouTube URL; starts playback if idle."""
-    try:
-        await interaction.response.defer(thinking=True, ephemeral=False)
-    except discord.NotFound:
-        # if this ever fires, the interaction token already expired
-        return
-
+    await interaction.response.defer(thinking=True, ephemeral=False)
     bot.loop.create_task(_do_play(interaction, url))
 
 
 async def _do_play(interaction: discord.Interaction, url: str) -> None:
-    """Helper function to handle the play command logic.
-
-    This is so I can use asyncio.create_task to run it in the background,
-    allowing the interaction to complete without blocking. This is necessary
-    because the YouTube audio extraction can take a while to download.
-
-    Args:
-        interaction: The Discord interaction that triggered the command.
-        url: The YouTube video URL to play.
-
-    Returns:
-        None
-
-    """
     if interaction.guild is None:
         return await interaction.followup.send(
-            "This command can only be used in a server.", ephemeral=False
+            "This command can only be used in a server.", ephemeral=True
         )
+
     member = interaction.guild.get_member(interaction.user.id)
     if (
         not member
@@ -232,27 +210,41 @@ async def _do_play(interaction: discord.Interaction, url: str) -> None:
         or not isinstance(member.voice.channel, discord.VoiceChannel)
     ):
         return await interaction.followup.send(
-            "You need to be in a standard voice channel to play audio.", ephemeral=True
+            "Join a voice channel first.", ephemeral=True
         )
 
     vc = await discord_utils.ensure_connected(interaction.guild, member.voice.channel)
+    mixer = await discord_utils.get_mixer_from_voice_client(vc)
 
-    try:
-        await youtube_jobs.add_to_queue(vc, url)
-        track_name = youtube_audio.get_youtube_track_name(url)
-
-        queue = await youtube_jobs.list_queue(vc)
-        position = len(queue)
-        msg = (
-            f"🎵 Queued **{track_name}** at position {position}."
-            if position > 1
-            else f"▶️ Now playing **{track_name}**"
+    # download and cache in background
+    fetch_task = asyncio.create_task(
+        youtube_audio.fetch_audio_pcm(
+            url,
+            sample_rate=mixer.SAMPLE_RATE,
+            channels=mixer.CHANNELS,
+            username=YOUTUBE_USERNAME,
+            password=YOUTUBE_PASSWORD,
         )
-        await interaction.followup.send(msg, ephemeral=False)
+    )
 
-    except Exception as e:
-        logger.exception("Error queueing YouTube audio")
-        await interaction.followup.send(f"Failed to queue audio: {e}", ephemeral=True)
+    # Add to queue. Playback (in mixer) will await cache when it's time
+    await youtube_jobs.add_to_queue(vc, url)
+
+    track_name = youtube_audio.get_youtube_track_name(url) or url
+    queue = await youtube_jobs.list_queue(vc)
+    pos = len(queue)
+    msg = (
+        f"🎵 Queued **{track_name}** at position {pos}."
+        if pos > 1
+        else f"▶️ Now playing **{track_name}**"
+    )
+    await interaction.followup.send(msg)
+
+    # wait for the background fetch to complete (so file is ready later)
+    try:
+        await fetch_task
+    except Exception:
+        logger.exception("Failed to fetch audio for %s", url)
 
 
 @bot.tree.command(name="list_queue", description="List upcoming YouTube tracks")
