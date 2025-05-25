@@ -238,12 +238,6 @@ async def _do_play(interaction: discord.Interaction, url: str) -> None:
     vc = await discord_utils.ensure_connected(interaction.guild, member.voice.channel)
 
     try:
-        if not youtube_audio.check_youtube_url(url):
-            return await interaction.followup.send(
-                "Invalid YouTube URL. Please provide a valid video link.",
-                ephemeral=True,
-            )
-
         await youtube_jobs.add_to_queue(vc, url)
         track_name = youtube_audio.get_youtube_track_name(url)
 
@@ -321,9 +315,12 @@ async def skip(interaction: discord.Interaction) -> None:
 
     track_url = youtube_jobs.get_current_track(vc)
     if not track_url:
-        track_url = ""
+        await interaction.response.send_message(
+            "No track is currently playing.", ephemeral=True
+        )
+        return
 
-    track_name = youtube_audio.check_youtube_url(track_url)
+    track_name = youtube_audio.get_youtube_track_name(track_url)
     await interaction.response.send_message(
         f"⏭️ Skipped to next track: {track_name}",
         ephemeral=False,

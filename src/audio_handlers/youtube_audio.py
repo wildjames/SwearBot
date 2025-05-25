@@ -15,7 +15,6 @@ Usage:
 
 import asyncio
 import logging
-import re
 from typing import Any, cast
 
 from yt_dlp import YoutubeDL  # type: ignore[import]
@@ -114,25 +113,6 @@ async def extract_audio_pcm(
     return bytearray(out)
 
 
-def check_youtube_url(url: str) -> bool:
-    """Check if the URL is a valid Youtube URL."""
-    if url in _video_filenames:
-        # If we already have the video name, we know it's valid
-        return True
-
-    # Pattern to match YouTube URLs and extract the video ID
-    pattern = re.compile(
-        r"^(?:https?://)?(?:www\.)?"
-        r"(?:youtube\.com/(?:watch\?(?:.*&)?v=|embed/)|youtu\.be/)"
-        r"(?P<id>[A-Za-z0-9_-]{11})"
-    )
-    match = pattern.match(url)
-    if not match:
-        logger.error("Invalid YouTube URL: %s", url)
-        return False
-    return True
-
-
 def get_youtube_track_name(url: str) -> str | None:
     """Get the track name from a YouTube URL.
 
@@ -143,10 +123,6 @@ def get_youtube_track_name(url: str) -> str | None:
         The track name if available, otherwise None.
 
     """
-    if not check_youtube_url(url):
-        logger.error("Invalid YouTube URL: %s", url)
-        return None
-
     if url in _video_filenames:
         # If we already have the video name, return it
         return _video_filenames[url]

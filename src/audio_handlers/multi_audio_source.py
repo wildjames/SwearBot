@@ -9,7 +9,7 @@ from typing import TypedDict
 
 from discord import AudioSource, VoiceClient
 
-from src.audio_handlers.youtube_audio import check_youtube_url, extract_audio_pcm
+from src.audio_handlers.youtube_audio import extract_audio_pcm
 
 logger = logging.getLogger(__name__)
 
@@ -185,8 +185,6 @@ class MultiAudioSource(AudioSource):
     ) -> None:
         """Plays a YouTube video by extracting its audio and queuing it for mixing."""
         logger.info("Playing YouTube URL %s", url)
-
-        check_youtube_url(url)
 
         # extract audio from YouTube URL
         pcm_data = await extract_audio_pcm(
