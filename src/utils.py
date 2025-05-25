@@ -1,8 +1,11 @@
 from typing import cast
 
 import discord
+from discord.ext import voice_recv
 
 from .multi_audio_source import MultiAudioSource, ensure_mixer
+
+DISCORD_VOICE_CLIENT = voice_recv.VoiceRecvClient
 
 
 async def ensure_connected(
@@ -11,7 +14,7 @@ async def ensure_connected(
     """Connect to voice or reuse existing connection."""
     vc = guild.voice_client
     if not vc or not isinstance(vc, discord.VoiceClient) or not vc.is_connected():
-        vc = await channel.connect()
+        vc = await channel.connect(cls=DISCORD_VOICE_CLIENT)
     return vc
 
 
@@ -31,7 +34,7 @@ async def get_mixer_from_interaction(
     if not vc:
         member = interaction.guild.get_member(interaction.user.id)
         if member and member.voice and member.voice.channel:
-            vc = await member.voice.channel.connect()
+            vc = await member.voice.channel.connect(cls=DISCORD_VOICE_CLIENT)
         else:
             await interaction.followup.send(
                 "You need to be in a voice channel (or have me already in one)"

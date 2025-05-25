@@ -16,11 +16,13 @@ RUN apt-get update && \
         libffi-dev \
         liblzma-dev \
         libncurses5-dev \
+        libopus0 \
         libreadline-dev \
         libsqlite3-dev \
         libssl-dev \
         make \
-        zlib1g-dev
+        zlib1g-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 SHELL [ "/bin/bash", "-o", "pipefail", "-c" ]
 RUN curl https://pyenv.run | bash
@@ -38,6 +40,14 @@ RUN pip install --no-cache-dir poetry && \
 
 FROM mcr.microsoft.com/devcontainers/base:bookworm
 COPY --from=builder /opt/.pyenv /opt/.pyenv
+
+# hadolint ignore=DL3008
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        ffmpeg \
+        git \
+        libopus0 \
+    && rm -rf /var/lib/apt/lists/*
 
 ENV PYENV_ROOT="/opt/.pyenv"
 ENV PATH="$PYENV_ROOT/shims:$PYENV_ROOT/bin:$PATH"

@@ -13,6 +13,7 @@ RUN apt-get update && \
         ca-certificates=20230311 \
         curl=7.88.1-10+deb12u12 \
         ffmpeg=7:5.1.6-0+deb12u1 \
+        libopus0=1.3.1-3 \
         make=4.3-4.1 \
         unzip=6.0-28 \
     && rm -rf /var/lib/apt/lists/*

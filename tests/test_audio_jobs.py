@@ -47,7 +47,7 @@ class DummyChannel:
     def __init__(self, vc):
         self._vc = vc
 
-    async def connect(self):
+    async def connect(self, cls=DummyVC):
         return self._vc
 
 @pytest.mark.asyncio
@@ -82,6 +82,7 @@ async def test_ensure_connected_existing(monkeypatch):
     channel = DummyChannel(vc)
     out = await utils.ensure_connected(guild, channel)
     assert out is vc
+
     # Case 2: no vc
     guild2 = DummyGuild(id=3, vc=None)
     new_vc = DummyVC(guild_id=3, connected=False)

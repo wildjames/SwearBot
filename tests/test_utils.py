@@ -19,7 +19,7 @@ class DummyChannel:
     def __init__(self, vc):
         self._vc = vc
 
-    async def connect(self):
+    async def connect(self, cls=DummyVoiceClient):
         return self._vc
 
 class DummyVoice:
