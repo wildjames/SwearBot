@@ -9,7 +9,7 @@ from typing import TypedDict
 
 from discord import AudioSource, VoiceClient
 
-from .youtube_audio import check_youtube_url, extract_audio_pcm
+from src.audio_handlers.youtube_audio import check_youtube_url, extract_audio_pcm
 
 logger = logging.getLogger(__name__)
 

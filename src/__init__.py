@@ -1,1 +1,1 @@
-"""A discord bot that plays sound effects in a voice channel."""
+"""A discord bot that plays music and sound effects in a voice channel."""

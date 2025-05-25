@@ -1,6 +1,6 @@
 import logging
 
-from . import utils
+from src import discord_utils
 
 # TODO: This should maintain a "playing" state so we can pause and resume playback
 
@@ -11,7 +11,7 @@ youtube_queue: dict[int, list[str]] = {}
 logger = logging.getLogger(__name__)
 
 
-async def add_to_queue(vc: utils.DISCORD_VOICE_CLIENT, url: str) -> None:
+async def add_to_queue(vc: discord_utils.DISCORD_VOICE_CLIENT, url: str) -> None:
     """Add a YouTube URL to the playback queue for the given voice client.
 
     If nothing is playing, start playback immediately.
@@ -36,7 +36,7 @@ async def add_to_queue(vc: utils.DISCORD_VOICE_CLIENT, url: str) -> None:
             raise
 
 
-async def _play_next(vc: utils.DISCORD_VOICE_CLIENT) -> None:
+async def _play_next(vc: discord_utils.DISCORD_VOICE_CLIENT) -> None:
     """Internal: play the next URL in the queue for vc, if any."""
     queue = youtube_queue.get(vc.guild.id)
     logger.info("Queue length for guild_id=%s: %d", vc.guild.id, len(queue or []))
@@ -72,7 +72,7 @@ async def _play_next(vc: utils.DISCORD_VOICE_CLIENT) -> None:
             )
 
     try:
-        mixer = await utils.get_mixer_from_voice_client(vc)
+        mixer = await discord_utils.get_mixer_from_voice_client(vc)
         await mixer.play_youtube(url, after_play=_after_play)
     except Exception:
         logger.exception("Error playing YouTube URL %s", url)
@@ -80,7 +80,7 @@ async def _play_next(vc: utils.DISCORD_VOICE_CLIENT) -> None:
         youtube_queue.pop(vc.guild.id, None)
 
 
-def get_current_track(vc: utils.DISCORD_VOICE_CLIENT) -> str | None:
+def get_current_track(vc: discord_utils.DISCORD_VOICE_CLIENT) -> str | None:
     """Get the currently playing YouTube URL for the voice client."""
     queue = youtube_queue.get(vc.guild.id)
     if queue and len(queue) > 0:
@@ -88,9 +88,9 @@ def get_current_track(vc: utils.DISCORD_VOICE_CLIENT) -> str | None:
     return None
 
 
-async def skip(vc: utils.DISCORD_VOICE_CLIENT) -> None:
+async def skip(vc: discord_utils.DISCORD_VOICE_CLIENT) -> None:
     """Skip the current track and play the next in queue."""
-    mixer = await utils.get_mixer_from_voice_client(vc)
+    mixer = await discord_utils.get_mixer_from_voice_client(vc)
     try:
         # This triggers the after_play callback which will handle the next track
         logger.info("Skipping current track for guild_id=%s", vc.guild.id)
@@ -99,22 +99,22 @@ async def skip(vc: utils.DISCORD_VOICE_CLIENT) -> None:
         logger.exception("Error stopping current track for guild_id=%s", vc.guild.id)
 
 
-async def clear_queue(vc: utils.DISCORD_VOICE_CLIENT) -> None:
+async def clear_queue(vc: discord_utils.DISCORD_VOICE_CLIENT) -> None:
     """Clear all queued tracks for the voice client."""
     if vc.guild.id in youtube_queue:
         youtube_queue.pop(vc.guild.id, None)
         logger.info("Cleared YouTube queue for guild_id=%s", vc.guild.id)
 
 
-async def list_queue(vc: utils.DISCORD_VOICE_CLIENT) -> list[str]:
+async def list_queue(vc: discord_utils.DISCORD_VOICE_CLIENT) -> list[str]:
     """Return the list of queued URLs for the voice client."""
     return list(youtube_queue.get(vc.guild.id, []))
 
 
-async def stop(vc: utils.DISCORD_VOICE_CLIENT) -> None:
+async def stop(vc: discord_utils.DISCORD_VOICE_CLIENT) -> None:
     """Stop playback and clear the queue."""
     # Stop current playback
-    mixer = await utils.get_mixer_from_voice_client(vc)
+    mixer = await discord_utils.get_mixer_from_voice_client(vc)
     try:
         mixer.stop()
     except Exception:

@@ -1,8 +1,8 @@
 # type: ignore
 import pytest
 
-import src.utils as utils
-from src.utils import (
+import src.discord_utils as discord_utils
+from src.discord_utils import (
     get_mixer_from_interaction,
     get_mixer_from_voice_client,
 )
@@ -97,7 +97,7 @@ async def test_get_mixer_from_interaction_connects_and_returns_mixer(monkeypatch
     dummy_mixer = DummyMixer()
     async def fake_ensure(vcin):
         return dummy_mixer
-    monkeypatch.setattr(utils, "ensure_mixer", fake_ensure)
+    monkeypatch.setattr(discord_utils, "ensure_mixer", fake_ensure)
 
     result = await get_mixer_from_interaction(interaction)
     assert result is dummy_mixer
@@ -111,7 +111,7 @@ async def test_get_mixer_from_interaction_failed_ensure_sends_and_raises(monkeyp
 
     async def fake_ensure(vcin):
         return None
-    monkeypatch.setattr(utils, "ensure_mixer", fake_ensure)
+    monkeypatch.setattr(discord_utils, "ensure_mixer", fake_ensure)
 
     with pytest.raises(ValueError) as exc:
         await get_mixer_from_interaction(interaction)
@@ -134,7 +134,7 @@ async def test_get_mixer_from_voice_client_failed_ensure(monkeypatch):
     vc = DummyVoiceClient()
     async def fake_ensure(vcin):
         return None
-    monkeypatch.setattr(utils, "ensure_mixer", fake_ensure)
+    monkeypatch.setattr(discord_utils, "ensure_mixer", fake_ensure)
 
     with pytest.raises(ValueError) as exc:
         await get_mixer_from_voice_client(vc)
@@ -146,7 +146,7 @@ async def test_get_mixer_from_voice_client_success(monkeypatch):
     dummy_mixer = DummyMixer()
     async def fake_ensure(vcin):
         return dummy_mixer
-    monkeypatch.setattr(utils, "ensure_mixer", fake_ensure)
+    monkeypatch.setattr(discord_utils, "ensure_mixer", fake_ensure)
 
     result = await get_mixer_from_voice_client(vc)
     assert result is dummy_mixer

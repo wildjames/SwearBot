@@ -4,13 +4,13 @@ import asyncio
 import random
 import uuid
 
-from src.audio_sfx_jobs import (
+from src.schedulers.audio_sfx_jobs import (
     loop_jobs,
     add_job,
     remove_job,
     _play_sfx_loop,
 )
-from src import utils
+from src import discord_utils
 
 
 @pytest.fixture(autouse=True)
@@ -79,14 +79,14 @@ async def test_ensure_connected_existing(monkeypatch):
     vc = DummyVC(guild_id=2, connected=True)
     guild = DummyGuild(id=2, vc=vc)
     channel = DummyChannel(vc)
-    out = await utils.ensure_connected(guild, channel)
+    out = await discord_utils.ensure_connected(guild, channel)
     assert out is vc
 
     # Case 2: no vc
     guild2 = DummyGuild(id=3, vc=None)
     new_vc = DummyVC(guild_id=3, connected=False)
     channel2 = DummyChannel(new_vc)
-    out2 = await utils.ensure_connected(guild2, channel2)
+    out2 = await discord_utils.ensure_connected(guild2, channel2)
     assert out2 is new_vc
 
 @pytest.mark.asyncio
@@ -124,7 +124,7 @@ async def test_play_sfx_loop_play_error(monkeypatch):
     # Patch utils.get_mixer_from_voice_client to throw
     async def fake_get_mixer(vc_in):
         raise RuntimeError("fail")
-    monkeypatch.setattr(utils, 'get_mixer_from_voice_client', fake_get_mixer)
+    monkeypatch.setattr(discord_utils, 'get_mixer_from_voice_client', fake_get_mixer)
 
     await _play_sfx_loop(vc, job_id)
 
@@ -159,7 +159,7 @@ async def test_play_sfx_loop_success_one_iteration(monkeypatch):
     # Patch utils.get_mixer_from_voice_client
     async def fake_get_mixer(vc_in):
         return dummy_mixer
-    monkeypatch.setattr(utils, 'get_mixer_from_voice_client', fake_get_mixer)
+    monkeypatch.setattr(discord_utils, 'get_mixer_from_voice_client', fake_get_mixer)
 
     # To exit after one iteration, remove job within after_play
     original_after = dummy_mixer.play_file

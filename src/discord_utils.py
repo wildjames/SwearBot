@@ -3,7 +3,7 @@ from typing import cast
 import discord
 from discord.ext import voice_recv
 
-from .multi_audio_source import MultiAudioSource, ensure_mixer
+from src.audio_handlers.multi_audio_source import MultiAudioSource, ensure_mixer
 
 DISCORD_VOICE_CLIENT = voice_recv.VoiceRecvClient
 

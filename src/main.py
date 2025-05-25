@@ -1,4 +1,4 @@
-import logging  # noqa: I001, RUF100
+import logging
 import os
 import random
 from pathlib import Path
@@ -8,12 +8,9 @@ from discord import app_commands
 from discord.ext import commands
 from dotenv import load_dotenv
 
-from . import (
-    audio_sfx_jobs,
-    utils,
-    youtube_audio,
-    youtube_jobs,
-)
+from src import discord_utils
+from src.audio_handlers import youtube_audio
+from src.schedulers import audio_sfx_jobs, youtube_jobs
 
 load_dotenv()
 
@@ -87,7 +84,7 @@ async def add_sfx(
         )
         return
 
-    vc = await utils.ensure_connected(interaction.guild, member.voice.channel)
+    vc = await discord_utils.ensure_connected(interaction.guild, member.voice.channel)
     try:
         job_id = await audio_sfx_jobs.add_job(vc, sound, min_interval, max_interval)
         message = (
@@ -181,7 +178,7 @@ async def trigger_sfx(interaction: discord.Interaction) -> None:
 
     # pick & fire off the effect
     sound = random.choice(audio_sfx_jobs.SOUND_FILES)  # noqa: S311
-    mixer = await utils.get_mixer_from_interaction(interaction)
+    mixer = await discord_utils.get_mixer_from_interaction(interaction)
     mixer.play_file(sound)
     await interaction.followup.send(
         f"🔊    Playing **{Path(sound).name}**", ephemeral=False
@@ -238,7 +235,7 @@ async def _do_play(interaction: discord.Interaction, url: str) -> None:
             "You need to be in a standard voice channel to play audio.", ephemeral=True
         )
 
-    vc = await utils.ensure_connected(interaction.guild, member.voice.channel)
+    vc = await discord_utils.ensure_connected(interaction.guild, member.voice.channel)
 
     try:
         if not youtube_audio.check_youtube_url(url):
@@ -283,7 +280,7 @@ async def list_queue(interaction: discord.Interaction) -> None:
             ephemeral=True,
         )
         return
-    vc = await utils.ensure_connected(interaction.guild, member.voice.channel)
+    vc = await discord_utils.ensure_connected(interaction.guild, member.voice.channel)
     upcoming = await youtube_jobs.list_queue(vc)
     if not upcoming:
         msg = "The queue is empty."
@@ -318,7 +315,7 @@ async def skip(interaction: discord.Interaction) -> None:
             ephemeral=True,
         )
         return
-    vc = await utils.ensure_connected(interaction.guild, member.voice.channel)
+    vc = await discord_utils.ensure_connected(interaction.guild, member.voice.channel)
     await youtube_jobs.skip(vc)
     logger.info("Skipped track for guild_id=%s", interaction.guild.id)
 
@@ -351,7 +348,7 @@ async def stopmusic(interaction: discord.Interaction) -> None:
             "You need to be in a standard voice channel to stop music.", ephemeral=True
         )
         return
-    vc = await utils.ensure_connected(interaction.guild, member.voice.channel)
+    vc = await discord_utils.ensure_connected(interaction.guild, member.voice.channel)
     await youtube_jobs.stop(vc)
     await interaction.response.send_message(
         "⏹️ Stopped and cleared YouTube queue.", ephemeral=False
@@ -377,7 +374,7 @@ async def clearqueue(interaction: discord.Interaction) -> None:
             ephemeral=True,
         )
         return
-    vc = await utils.ensure_connected(interaction.guild, member.voice.channel)
+    vc = await discord_utils.ensure_connected(interaction.guild, member.voice.channel)
     logger.info("Clearing YouTube queue for guild_id=%s", interaction.guild.id)
 
     # Clear the queue
@@ -413,7 +410,7 @@ async def stop(interaction: discord.Interaction) -> None:
             "You need to be in a standard voice channel to add a job.", ephemeral=True
         )
         return
-    vc = await utils.ensure_connected(interaction.guild, member.voice.channel)
+    vc = await discord_utils.ensure_connected(interaction.guild, member.voice.channel)
 
     await audio_sfx_jobs.stop_all_jobs(vc)
     await youtube_jobs.stop(vc)

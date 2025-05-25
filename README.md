@@ -5,9 +5,11 @@ I got the soundbites from [here](https://drive.google.com/drive/folders/1dr2XcAQ
 
 # TODO List
 
- - [ ] Add skip command for youtube queue
- - [ ] Add clearqueue command for youtube
- - [ ] Parse youtube URLs into video titles
+ - [ ] ffmpeg REALLY doesn't like long videos, and hangs indefinitely
+ - [x] Add skip command for youtube queue
+ - [x] Add clearqueue command for youtube
+ - [x] Parse youtube URLs into video titles
+ - [ ] Youtube playlist support
  - [ ] figure out voice listening
  - [ ] STT parsing
  - [ ] SFX triggered by wakewords (make sure this is togglable)

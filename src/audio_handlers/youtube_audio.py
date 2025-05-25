@@ -1,4 +1,4 @@
-"""youtube audio extraction.
+"""Youtube audio extraction.
 
 Module to extract audio from a YouTube video and return the audio as PCM in an
 int16 bytearray.

@@ -7,7 +7,7 @@ from pathlib import Path
 
 import anyio
 
-from . import utils
+from src import discord_utils
 
 # Load all sound files from the sounds directory
 SOUND_FILES = [str(p) for p in Path("sounds").rglob("*") if p.is_file()]
@@ -19,11 +19,12 @@ logger.info(
 # Track active jobs:
 #   job_id -> (VoiceClient, asyncio.Task, sound_file, min_interval, max_interval)
 loop_jobs: dict[
-    str, tuple[utils.DISCORD_VOICE_CLIENT, asyncio.Task[None], str, float, float]
+    str,
+    tuple[discord_utils.DISCORD_VOICE_CLIENT, asyncio.Task[None], str, float, float],
 ] = {}
 
 
-async def _play_sfx_loop(vc: utils.DISCORD_VOICE_CLIENT, job_id: str) -> None:
+async def _play_sfx_loop(vc: discord_utils.DISCORD_VOICE_CLIENT, job_id: str) -> None:
     """Internal loop: play the given SFX on its own schedule.
 
     This function is run in a separate task and will be cancelled when the
@@ -55,7 +56,7 @@ async def _play_sfx_loop(vc: utils.DISCORD_VOICE_CLIENT, job_id: str) -> None:
                 done_event.set()
 
             try:
-                mixer = await utils.get_mixer_from_voice_client(vc)
+                mixer = await discord_utils.get_mixer_from_voice_client(vc)
                 mixer.play_file(sound, after_play=_after_play)
             except Exception:
                 logger.exception("Error playing %s", sound)
@@ -69,7 +70,7 @@ async def _play_sfx_loop(vc: utils.DISCORD_VOICE_CLIENT, job_id: str) -> None:
 
 
 async def add_job(
-    vc: utils.DISCORD_VOICE_CLIENT,
+    vc: discord_utils.DISCORD_VOICE_CLIENT,
     sound: str,
     min_interval: float,
     max_interval: float,
@@ -102,7 +103,7 @@ async def remove_job(job_id: str) -> None:
     )
 
 
-async def stop_all_jobs(vc: utils.DISCORD_VOICE_CLIENT) -> None:
+async def stop_all_jobs(vc: discord_utils.DISCORD_VOICE_CLIENT) -> None:
     """Stop all SFX jobs for the given voice client."""
     jobs_to_remove = [jid for jid, (j_vc, *_) in loop_jobs.items() if j_vc == vc]
     for job_id in jobs_to_remove:

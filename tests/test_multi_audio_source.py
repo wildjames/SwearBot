@@ -5,7 +5,7 @@ import subprocess
 
 import pytest
 
-from ..src.multi_audio_source import (
+from src.audio_handlers.multi_audio_source import (
     MultiAudioSource,
     _mixers,
     ensure_mixer,

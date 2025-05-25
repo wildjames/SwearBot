@@ -22,11 +22,15 @@ clean:
 	@echo "Cleaning up..."
 	# Remove Python bytecode and __pycache__ directories
 	find . -type d -name "__pycache__" -exec rm -rf {} +
+	find . -type d -name ".pytest_cache" -exec rm -rf {} +
 	find . -type f -name "*.pyc" -delete
 	# Remove Ruff cache
 	rm -rf .ruff_cache
 	# Remove build artifacts
 	rm -rf build/ dist/ *.egg-info
+	# Remove sounds directory if it exists
+	rm -rf sounds/
+	rm .coverage
 
 docker-build:
 	docker build -t swearbot:latest .
