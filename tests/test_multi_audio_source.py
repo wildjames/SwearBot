@@ -22,17 +22,23 @@ def test_mix_samples_combines_and_clears_tracks():
 
     # Use small chunk size for testing (8 bytes -> 4 samples)
     src.CHUNK_SIZE = 8
-    track1 = {"samples": array.array("h", [1, 1, 1, 1]), "pos": 0}
-    track2 = {"samples": array.array("h", [2, 2, 2, 2]), "pos": 0}
-    total, new_tracks = src._mix_samples([track1, track2])
+    # Prepare tracks with after_play key for TypedDict
+    track1 = {"samples": array.array("h", [1, 1, 1, 1]), "pos": 0, "after_play": None}
+    track2 = {"samples": array.array("h", [2, 2, 2, 2]), "pos": 0, "after_play": None}
+    # Assign tracks
+    src._tracks = [track1, track2]
+    src._sfx = []
 
-    # The sum needs to be an int16 array
+    total = src._mix_samples()
+
+    # The sum needs to be an int32 array
     assert isinstance(total, array.array)
     assert total.typecode == "i"
     assert list(total) == [3, 3, 3, 3]
 
-    # Both tracks reached end, so new_tracks should be empty
-    assert new_tracks == []
+    # Both tracks reached end, so internal _tracks and _sfx should be empty
+    assert src._tracks == []
+    assert src._sfx == []
 
 
 def test_read_clips_and_respects_stopped(monkeypatch):
@@ -40,8 +46,8 @@ def test_read_clips_and_respects_stopped(monkeypatch):
     src.CHUNK_SIZE = 8
 
     # Stub mix to produce values outside clip range
-    def fake_mix(tracks):
-        return array.array("i", [100, -100, 0, 10]), []
+    def fake_mix():
+        return array.array("i", [100, -100, 0, 10])
 
     src._mix_samples = fake_mix
     src.MAX_VOLUME = 10

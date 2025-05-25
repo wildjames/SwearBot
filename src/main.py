@@ -1,14 +1,20 @@
+import asyncio
 import logging  # noqa: I001, RUF100
 import os
 import random
 from pathlib import Path
 
 import discord
-from discord.ext import commands
 from discord import app_commands
+from discord.ext import commands
 from dotenv import load_dotenv
 
-from . import audio_sfx_jobs, youtube_jobs, utils
+from . import (
+    audio_sfx_jobs,
+    utils,
+    youtube_audio,
+    youtube_jobs,
+)
 
 load_dotenv()
 
@@ -18,6 +24,7 @@ logging.basicConfig(level=logging.INFO)
 
 # Bot permissions
 intents = discord.Intents.default()
+intents.message_content = True
 intents.voice_states = True
 
 bot = commands.Bot(
@@ -48,7 +55,7 @@ async def on_ready() -> None:
 
 
 @bot.tree.command(
-    name="addjob",
+    name="add_sfx",
     description="Add a scheduled SFX job",
 )
 @app_commands.describe(
@@ -56,7 +63,7 @@ async def on_ready() -> None:
     min_interval="Minimum seconds between plays",
     max_interval="Maximum seconds between plays",
 )
-async def addjob(
+async def add_sfx(
     interaction: discord.Interaction,
     sound: str,
     min_interval: float,
@@ -95,9 +102,9 @@ async def addjob(
         )
 
 
-@bot.tree.command(name="removejob", description="Remove a scheduled SFX job")
+@bot.tree.command(name="remove_sfx", description="Remove a scheduled SFX job")
 @app_commands.describe(job_id="The ID of the job to remove")
-async def removejob(interaction: discord.Interaction, job_id: str) -> None:
+async def remove_sfx(interaction: discord.Interaction, job_id: str) -> None:
     """Remove a scheduled SFX job using its job identifier."""
     if interaction.guild is None:
         await interaction.response.send_message(
@@ -116,8 +123,8 @@ async def removejob(interaction: discord.Interaction, job_id: str) -> None:
         )
 
 
-@bot.tree.command(name="listjobs", description="List active SFX jobs")
-async def listjobs(interaction: discord.Interaction) -> None:
+@bot.tree.command(name="list_sfx", description="List active SFX jobs")
+async def list_sfx(interaction: discord.Interaction) -> None:
     """Send a list of active jobs in the server."""
     if interaction.guild is None:
         await interaction.response.send_message(
@@ -140,8 +147,8 @@ async def listjobs(interaction: discord.Interaction) -> None:
         )
 
 
-@bot.tree.command(name="trigger", description="Manually play a random sound effect")
-async def trigger(interaction: discord.Interaction) -> None:
+@bot.tree.command(name="trigger_sfx", description="Manually play a random sound effect")
+async def trigger_sfx(interaction: discord.Interaction) -> None:
     """Play a random sound effect in the voice channel."""
     await interaction.response.defer(thinking=True)
     if interaction.guild is None:
@@ -155,7 +162,7 @@ async def trigger(interaction: discord.Interaction) -> None:
     mixer = await utils.get_mixer_from_interaction(interaction)
     mixer.play_file(sound)
     await interaction.followup.send(
-        f"🔊    Playing **{Path(sound).name}**", ephemeral=True
+        f"🔊    Playing **{Path(sound).name}**", ephemeral=False
     )
 
 
@@ -171,10 +178,34 @@ async def play(
     url: str,
 ) -> None:
     """Enqueue a YouTube URL; starts playback if idle."""
-    await interaction.response.defer(thinking=True, ephemeral=True)
+    await interaction.response.defer(thinking=True, ephemeral=False)
+    try:
+        await interaction.response.defer(thinking=True)
+    except discord.NotFound:
+        # if this ever fires, the interaction token already expired
+        return
+
+    asyncio.create_task(_do_play(interaction, url))  # noqa: RUF006
+
+
+async def _do_play(interaction: discord.Interaction, url: str) -> None:
+    """Helper function to handle the play command logic.
+
+    This is so I can use asyncio.create_task to run it in the background,
+    allowing the interaction to complete without blocking. This is necessary
+    because the YouTube audio extraction can take a while to download.
+
+    Args:
+        interaction: The Discord interaction that triggered the command.
+        url: The YouTube video URL to play.
+
+    Returns:
+        None
+
+    """
     if interaction.guild is None:
         return await interaction.followup.send(
-            "This command can only be used in a server.", ephemeral=True
+            "This command can only be used in a server.", ephemeral=False
         )
     member = interaction.guild.get_member(interaction.user.id)
     if (
@@ -189,21 +220,29 @@ async def play(
     vc = await utils.ensure_connected(interaction.guild, member.voice.channel)
 
     try:
+        track_name = youtube_audio.check_youtube_url(url)
+        if track_name is None:
+            return await interaction.followup.send(
+                "Invalid YouTube URL. Please provide a valid video link.",
+                ephemeral=True,
+            )
+
         await youtube_jobs.add_to_queue(vc, url)
         queue = await youtube_jobs.list_queue(vc)
         position = len(queue)
         msg = (
-            f"🎵 Queued **{url}** at position {position}."
+            f"🎵 Queued **{track_name}** at position {position}."
             if position > 1
-            else f"▶️ Now playing **{url}**"
+            else f"▶️ Now playing **{track_name}**"
         )
-        await interaction.followup.send(msg, ephemeral=True)
+        await interaction.followup.send(msg, ephemeral=False)
+
     except Exception as e:
         logger.exception("Error queueing YouTube audio")
         await interaction.followup.send(f"Failed to queue audio: {e}", ephemeral=True)
 
 
-@bot.tree.command(name="queue", description="List upcoming YouTube tracks")
+@bot.tree.command(name="listqueue", description="List upcoming YouTube tracks")
 async def queue(interaction: discord.Interaction) -> None:
     """Show the current YouTube queue for this server."""
     if interaction.guild is None:
@@ -227,9 +266,47 @@ async def queue(interaction: discord.Interaction) -> None:
     if not upcoming:
         msg = "The queue is empty."
     else:
-        lines = [f"{i + 1}. {url}" for i, url in enumerate(upcoming)]
+        lines = [
+            f"{i + 1}. {youtube_audio.check_youtube_url(url)}"
+            for i, url in enumerate(upcoming)
+        ]
+        lines[0] = f"**Now playing:** {youtube_audio.check_youtube_url(upcoming[0])}"
         msg = "**Upcoming tracks:**\n" + "\n".join(lines)
     await interaction.response.send_message(msg, ephemeral=True)
+
+
+@bot.tree.command(name="skip", description="Skip the current YouTube track")
+async def skip(interaction: discord.Interaction) -> None:
+    """Stop current track and play next in queue."""
+    if interaction.guild is None:
+        await interaction.response.send_message(
+            "This command only works in a server.", ephemeral=True
+        )
+        return
+    member = interaction.guild.get_member(interaction.user.id)
+    if (
+        not member
+        or not member.voice
+        or not isinstance(member.voice.channel, discord.VoiceChannel)
+    ):
+        await interaction.response.send_message(
+            "You need to be in a standard voice channel to skip audio.",
+            ephemeral=True,
+        )
+        return
+    vc = await utils.ensure_connected(interaction.guild, member.voice.channel)
+    await youtube_jobs.skip(vc)
+    logger.info("Skipped track for guild_id=%s", interaction.guild.id)
+
+    track_url = youtube_jobs.get_current_track(vc)
+    if not track_url:
+        track_url = ""
+
+    track_name = youtube_audio.check_youtube_url(track_url)
+    await interaction.response.send_message(
+        f"⏭️ Skipped to next track: {track_name}",
+        ephemeral=False,
+    )
 
 
 @bot.tree.command(name="stopmusic", description="Stop playback and clear YouTube queue")
@@ -253,61 +330,40 @@ async def stopmusic(interaction: discord.Interaction) -> None:
     vc = await utils.ensure_connected(interaction.guild, member.voice.channel)
     await youtube_jobs.stop(vc)
     await interaction.response.send_message(
-        "⏹️ Stopped and cleared YouTube queue.", ephemeral=True
+        "⏹️ Stopped and cleared YouTube queue.", ephemeral=False
     )
 
 
-# @bot.tree.command(name="skip", description="Skip the current YouTube track")
-# async def skip(interaction: discord.Interaction) -> None:
-#     """Stop current track and play next in queue."""
-#     if interaction.guild is None:
-#         await interaction.response.send_message(
-#             "This command only works in a server.", ephemeral=True
-#         )
-#         return
-#     member = interaction.guild.get_member(interaction.user.id)
-#     if (
-#         not member
-#         or not member.voice
-#         or not isinstance(member.voice.channel, discord.VoiceChannel)
-#     ):
-#         await interaction.response.send_message(
-#             "You need to be in a standard voice channel to skip audio.",
-#             ephemeral=True,
-#         )
-#         return
-#     vc = await utils.ensure_connected(interaction.guild, member.voice.channel)
-#     await youtube_jobs.skip(vc)
-#     await interaction.response.send_message(
-#         "⏭️ Skipped to next track.",
-#         ephemeral=True,
-#     )
+@bot.tree.command(name="clearqueue", description="Clear the YouTube queue")
+async def clearqueue(interaction: discord.Interaction) -> None:
+    """Remove all queued YouTube tracks."""
+    if interaction.guild is None:
+        await interaction.response.send_message(
+            "This command only works in a server.", ephemeral=True
+        )
+        return
+    member = interaction.guild.get_member(interaction.user.id)
+    if (
+        not member
+        or not member.voice
+        or not isinstance(member.voice.channel, discord.VoiceChannel)
+    ):
+        await interaction.response.send_message(
+            "You need to be in a standard voice channel to clear the queue.",
+            ephemeral=True,
+        )
+        return
+    vc = await utils.ensure_connected(interaction.guild, member.voice.channel)
+    logger.info("Clearing YouTube queue for guild_id=%s", interaction.guild.id)
 
+    # Clear the queue
+    await youtube_jobs.clear_queue(vc)
+    current_queue = await youtube_jobs.list_queue(vc)
+    logger.info("queue after clearing: %s", current_queue)
 
-# @bot.tree.command(name="clearqueue", description="Clear the YouTube queue")
-# async def clearqueue(interaction: discord.Interaction) -> None:
-#     """Remove all queued YouTube tracks."""
-#     if interaction.guild is None:
-#         await interaction.response.send_message(
-#             "This command only works in a server.", ephemeral=True
-#         )
-#         return
-#     member = interaction.guild.get_member(interaction.user.id)
-#     if (
-#         not member
-#         or not member.voice
-#         or not isinstance(member.voice.channel, discord.VoiceChannel)
-#     ):
-#         await interaction.response.send_message(
-#             "You need to be in a standard voice channel to clear the queue.",
-#             ephemeral=True,
-#         )
-#         return
-#     vc = await utils.ensure_connected(interaction.guild, member.voice.channel)
-#     await youtube_jobs.clear_queue(vc)
-#     await interaction.response.send_message(
-#         "🗑️ Cleared the YouTube queue.", ephemeral=True
-#     )
+    await interaction.response.send_message(
+        "🗑️ Cleared the YouTube queue.", ephemeral=False
+    )
 
 
 # ------------ Bot Commands ------------
@@ -337,7 +393,10 @@ async def stop(interaction: discord.Interaction) -> None:
 
     await vc.disconnect(force=True)
     await audio_sfx_jobs.stop_all_jobs(vc)
-    await interaction.response.send_message("🔴    Stopped and left the voice channel.")
+    await interaction.response.send_message(
+        "🔴    Stopped and left the voice channel.",
+        ephemeral=False,
+    )
 
 
 @bot.tree.command(name="ping", description="Check if the bot is alive")

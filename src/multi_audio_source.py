@@ -9,7 +9,7 @@ from typing import TypedDict
 
 from discord import AudioSource, VoiceClient
 
-from .youtube_audio import extract_audio_pcm
+from .youtube_audio import check_youtube_url, extract_audio_pcm
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +58,7 @@ class MultiAudioSource(AudioSource):
         # protect track list against concurrent play_file() calls
         self._lock = threading.Lock()
         self._tracks: list[Track] = []
+        self._sfx: list[Track] = []
         self._stopped = False
 
     def is_opus(self) -> bool:
@@ -68,7 +69,7 @@ class MultiAudioSource(AudioSource):
         """Clean up the audio source by clearing all tracks and marking stopped."""
         self.stop()
 
-    def _mix_samples(self, tracks: list[Track]) -> tuple[array.array[int], list[Track]]:
+    def _mix_samples(self) -> array.array[int]:
         """Mixes the samples of all tracks together.
 
         Args:
@@ -82,10 +83,13 @@ class MultiAudioSource(AudioSource):
         """
         # create a new array for the mixed samples. Use int32 to avoid overflow.
         total = array.array("i", [0] * (self.CHUNK_SIZE // 2))
-        new_tracks: list[Track] = []
 
-        # mix all tracks together
-        for track in tracks:
+        # New track and sfx lists to hold tracks that are still playing
+        new_tracks: list[Track] = []
+        new_sfx: list[Track] = []
+
+        # mix all tracks and sfx together
+        for track in self._tracks + self._sfx:
             samples = track["samples"]
 
             # Get the range of samples to mix
@@ -114,9 +118,15 @@ class MultiAudioSource(AudioSource):
                     except Exception:
                         logger.exception("Error in after_play callback")
             else:
-                new_tracks.append(track)
+                if track in self._tracks:
+                    new_tracks.append(track)
+                if track in self._sfx:
+                    new_sfx.append(track)
 
-        return total, new_tracks
+        self._tracks = new_tracks
+        self._sfx = new_sfx
+
+        return total
 
     def read(self) -> bytes:
         """Called by discord.py every ~20ms from a background thread.
@@ -127,7 +137,7 @@ class MultiAudioSource(AudioSource):
             return b"\x00" * self.CHUNK_SIZE
 
         with self._lock:
-            total, self._tracks = self._mix_samples(self._tracks)
+            total = self._mix_samples()
 
         out = array.array("h", [0] * (self.CHUNK_SIZE // 2))
         for i, val in enumerate(total):
@@ -143,9 +153,28 @@ class MultiAudioSource(AudioSource):
     def stop(self) -> None:
         """Stops the audio source by clearing all tracks and marking it as stopped."""
         logger.info("Stopping MultiAudioSource")
+        self.stop_sfx()
+        self.stop_tracks()
+
+    def stop_sfx(self) -> None:
+        """Stops all sound effects by clearing the sfx track list."""
+        logger.info("Stopping all sound effects")
+        with self._lock:
+            self._sfx.clear()
+            logger.info("All sound effects stopped")
+
+    @property
+    def is_stopped(self) -> bool:
+        """Checks if the audio source is stopped."""
+        return self._stopped
+
+    def stop_tracks(self) -> None:
+        """Stops all tracks by clearing the track list and marking it as stopped."""
+        logger.info("Stopping all tracks")
         with self._lock:
             self._tracks.clear()
             self._stopped = True
+            logger.info("All tracks stopped")
 
     def play_youtube(
         self,
@@ -157,6 +186,8 @@ class MultiAudioSource(AudioSource):
         """Plays a YouTube video by extracting its audio and queuing it for mixing."""
         logger.info("Playing YouTube URL %s", url)
 
+        check_youtube_url(url)
+
         # extract audio from YouTube URL
         pcm_data = extract_audio_pcm(
             url,
@@ -164,6 +195,11 @@ class MultiAudioSource(AudioSource):
             channels=self.CHANNELS,
             username=username,
             password=password,
+        )
+        logger.info(
+            "Extracted audio (%d bytes) from YouTube URL %s",
+            len(pcm_data),
+            url,
         )
 
         # convert bytes to array of int16 samples
@@ -175,6 +211,8 @@ class MultiAudioSource(AudioSource):
             self._tracks.append(
                 {"samples": samples, "pos": 0, "after_play": after_play}
             )
+
+        self._stopped = False
         logger.info("There are now %d tracks in the mixer", len(self._tracks))
 
     def play_file(
@@ -227,4 +265,29 @@ class MultiAudioSource(AudioSource):
             self._tracks.append(
                 {"samples": samples, "pos": 0, "after_play": after_play}
             )
+
+        self._stopped = False
         logger.info("There are now %d tracks in the mixer", len(self._tracks))
+
+    def skip_current_tracks(self) -> None:
+        """Skips the currently playing track by moving its position to the end.
+
+        Triggers its callback.
+        """
+        with self._lock:
+            # Loop over all tracks and skip them
+            logger.info("Skipping current tracks")
+            while self._tracks:
+                track = self._tracks.pop(0)
+                # move position to end
+                track["pos"] = len(track["samples"])
+                # trigger after_play callback if present
+                callback = track.get("after_play")
+                if callback:
+                    try:
+                        logger.info("Calling after_play callback for skipped track")
+                        callback()
+                    except Exception:
+                        logger.exception(
+                            "Error in after_play callback for skipped track"
+                        )
