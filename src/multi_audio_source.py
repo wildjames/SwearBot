@@ -131,7 +131,11 @@ class MultiAudioSource(AudioSource):
         return out.tobytes()
 
     def play_youtube(
-        self, url: str, after_play: Callable[[], None] | None = None
+        self,
+        url: str,
+        username: str | None = None,
+        password: str | None = None,
+        after_play: Callable[[], None] | None = None,
     ) -> None:
         """Plays a YouTube video by extracting its audio and queuing it for mixing."""
         logger.info("Playing YouTube URL %s", url)
@@ -141,6 +145,8 @@ class MultiAudioSource(AudioSource):
             url,
             sample_rate=self.SAMPLE_RATE,
             channels=self.CHANNELS,
+            username=username,
+            password=password,
         )
 
         # convert bytes to array of int16 samples

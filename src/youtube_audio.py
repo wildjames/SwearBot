@@ -17,7 +17,7 @@ import logging
 import subprocess
 from typing import Any
 
-from yt_dlp import YoutubeDL
+from yt_dlp import YoutubeDL  # type: ignore I dont care about type checking here
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +26,8 @@ def extract_audio_pcm(
     url: str,
     sample_rate: int = 44100,
     channels: int = 2,
+    username: str | None = None,  # noqa: ARG001 Will be implemented later
+    password: str | None = None,  # noqa: ARG001
 ) -> bytearray:
     """Download audio from a YouTube URL and convert it to PCM 16-bit little-endian.
 
@@ -53,9 +55,12 @@ def extract_audio_pcm(
     }
 
     with YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url, download=False)
+        info = ydl.extract_info(
+            url,
+            download=False,
+        )
         if not info:
-            msg = f"Could not extract info from {url}"
+            msg = f"Could not extract info from {url}. See logs for details."
             raise RuntimeError(msg)
         audio_url = info.get("url")
         if not audio_url:

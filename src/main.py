@@ -34,6 +34,10 @@ if not BOT_TOKEN:
     raise ValueError(msg)
 
 
+YOUTUBE_USERNAME = os.getenv("YOUTUBE_USERNAME", None)
+YOUTUBE_PASSWORD = os.getenv("YOUTUBE_PASSWORD", None)
+
+
 @bot.event
 async def on_ready() -> None:
     """Call when the bot is ready; synchronizes slash commands with Discord."""
@@ -219,7 +223,11 @@ async def play(
 
     try:
         mixer = await utils.get_mixer_from_voice_client(vc)
-        mixer.play_youtube(url)
+        mixer.play_youtube(
+            url,
+            username=YOUTUBE_USERNAME,
+            password=YOUTUBE_PASSWORD,
+        )
         await interaction.followup.send(
             f"🎵    Playing audio from **{url}**!", ephemeral=True
         )
