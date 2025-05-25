@@ -4,7 +4,7 @@ import asyncio
 import random
 import uuid
 
-from src.audio_jobs import (
+from src.audio_sfx_jobs import (
     loop_jobs,
     add_job,
     remove_job,

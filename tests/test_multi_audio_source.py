@@ -94,13 +94,23 @@ def test_play_file_success(monkeypatch, tmp_path):
         called.append(True)
 
     src.play_file(str(dummy), after_play=after_play)
+
     # One track enqueued
     assert len(src._tracks) == 1
     track = src._tracks[0]
+
     # Samples converted correctly
     assert track["samples"] == array.array("h", [1, 2])
     assert track["pos"] == 0
-    # Callback called
+
+    # Callback not called until playback finishes
+    assert called == []
+
+    # read until the track is done
+    while track["pos"] < len(track["samples"]):
+        src.read()
+
+    # After reading all samples, callback should be called
     assert called == [True]
 
 

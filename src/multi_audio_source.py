@@ -33,6 +33,7 @@ class Track(TypedDict):
 
     samples: array.array[int]
     pos: int
+    after_play: Callable[[], None] | None
 
 
 class MultiAudioSource(AudioSource):
@@ -41,8 +42,12 @@ class MultiAudioSource(AudioSource):
     SAMPLE_RATE = 48000  # 48 KHz
     CHANNELS = 2  # Stereo
 
+    CHUNK_DURATION = 0.02  # 20ms
+
+    BYTE_SIZE = 2  # 16-bit samples, so 2 bytes per sample
+
     # 20ms of 16-bit 48 KHz stereo PCM (48000 * 2 channels * 2 bytes * 0.02)
-    CHUNK_SIZE = int(SAMPLE_RATE * CHANNELS * 2 * 0.02)
+    CHUNK_SIZE = int(SAMPLE_RATE * CHANNELS * BYTE_SIZE * CHUNK_DURATION)
 
     # int16 min/max values
     MIN_VOLUME = -32768
@@ -61,9 +66,7 @@ class MultiAudioSource(AudioSource):
 
     def cleanup(self) -> None:
         """Clean up the audio source by clearing all tracks and marking stopped."""
-        with self._lock:
-            self._tracks.clear()
-            self._stopped = True
+        self.stop()
 
     def _mix_samples(self, tracks: list[Track]) -> tuple[array.array[int], list[Track]]:
         """Mixes the samples of all tracks together.
@@ -101,9 +104,16 @@ class MultiAudioSource(AudioSource):
 
             track["pos"] = end
 
-            # if the track is not finished, keep it in the list
-            # otherwise, don't
-            if end < len(samples):
+            # Check if track has finished
+            if end >= len(samples):
+                callback = track.get("after_play")
+                if callback:
+                    try:
+                        logger.info("Calling after_play callback for track")
+                        callback()
+                    except Exception:
+                        logger.exception("Error in after_play callback")
+            else:
                 new_tracks.append(track)
 
         return total, new_tracks
@@ -130,6 +140,13 @@ class MultiAudioSource(AudioSource):
 
         return out.tobytes()
 
+    def stop(self) -> None:
+        """Stops the audio source by clearing all tracks and marking it as stopped."""
+        logger.info("Stopping MultiAudioSource")
+        with self._lock:
+            self._tracks.clear()
+            self._stopped = True
+
     def play_youtube(
         self,
         url: str,
@@ -155,11 +172,10 @@ class MultiAudioSource(AudioSource):
 
         # enqueue the track
         with self._lock:
-            self._tracks.append({"samples": samples, "pos": 0})
-
-        # call the callback if provided
-        if after_play:
-            after_play()
+            self._tracks.append(
+                {"samples": samples, "pos": 0, "after_play": after_play}
+            )
+        logger.info("There are now %d tracks in the mixer", len(self._tracks))
 
     def play_file(
         self, filename: str, after_play: Callable[[], None] | None = None
@@ -208,8 +224,7 @@ class MultiAudioSource(AudioSource):
 
         # enqueue the track
         with self._lock:
-            self._tracks.append({"samples": samples, "pos": 0})
-
-        # call the callback if provided
-        if after_play:
-            after_play()
+            self._tracks.append(
+                {"samples": samples, "pos": 0, "after_play": after_play}
+            )
+        logger.info("There are now %d tracks in the mixer", len(self._tracks))
