@@ -13,8 +13,16 @@ async def ensure_connected(
 ) -> DISCORD_VOICE_CLIENT:
     """Connect to voice or reuse existing connection."""
     vc = guild.voice_client
+
     if not vc or not isinstance(vc, DISCORD_VOICE_CLIENT) or not vc.is_connected():
         vc = await channel.connect(cls=DISCORD_VOICE_CLIENT)
+
+    elif vc.channel != channel:
+        # If the voice client is connected to a different channel,
+        # disconnect and reconnect
+        await vc.disconnect()
+        vc = await channel.connect(cls=DISCORD_VOICE_CLIENT)
+
     return vc
 
 

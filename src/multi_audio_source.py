@@ -134,7 +134,7 @@ class MultiAudioSource(AudioSource):
         Mixes together all active tracks and returns exactly CHUNK_SIZE bytes.
         """
         if self._stopped:
-            return b"\x00" * self.CHUNK_SIZE
+            return b""
 
         with self._lock:
             total = self._mix_samples()
@@ -176,7 +176,7 @@ class MultiAudioSource(AudioSource):
             self._stopped = True
             logger.info("All tracks stopped")
 
-    def play_youtube(
+    async def play_youtube(
         self,
         url: str,
         username: str | None = None,
@@ -189,7 +189,7 @@ class MultiAudioSource(AudioSource):
         check_youtube_url(url)
 
         # extract audio from YouTube URL
-        pcm_data = extract_audio_pcm(
+        pcm_data = await extract_audio_pcm(
             url,
             sample_rate=self.SAMPLE_RATE,
             channels=self.CHANNELS,

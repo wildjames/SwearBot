@@ -62,7 +62,7 @@ def test_read_clips_and_respects_stopped(monkeypatch):
     # Test stopped state returns silence
     src._stopped = True
     silence = src.read()
-    assert silence == b"\x00" * src.CHUNK_SIZE
+    assert silence == b""
 
 
 def test_cleanup_clears_tracks_and_sets_stopped():

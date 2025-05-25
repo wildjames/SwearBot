@@ -13,9 +13,9 @@ Usage:
     pcm_bytes = extract_audio_pcm("https://www.youtube.com/watch?v=...")
 """
 
+import asyncio
 import logging
 import re
-import subprocess
 from typing import Any, cast
 
 from yt_dlp import YoutubeDL  # type: ignore[import]
@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 _video_filenames: dict[str, str] = {}
 
 
-def extract_audio_pcm(
+async def extract_audio_pcm(
     url: str,
     sample_rate: int = 44100,
     channels: int = 2,
@@ -99,23 +99,26 @@ def extract_audio_pcm(
         "pipe:1",
     ]
 
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)  # noqa: S603
-    out, err = proc.communicate()
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+
+    out, err = await proc.communicate()
+
     if proc.returncode != 0:
-        msg = f"ffmpeg error: {err.decode('utf-8', errors='ignore')}"
+        msg = f"ffmpeg failed: {err.decode(errors='ignore')}"
         raise RuntimeError(msg)
 
     return bytearray(out)
 
 
-def check_youtube_url(url: str) -> str | None:
-    """Check if the URL is a valid Youtube URL.
-
-    If it is, then fetch and return the video name. If not, return None.
-    """
+def check_youtube_url(url: str) -> bool:
+    """Check if the URL is a valid Youtube URL."""
     if url in _video_filenames:
-        # If we already have the video name, return it
-        return _video_filenames[url]
+        # If we already have the video name, we know it's valid
+        return True
 
     # Pattern to match YouTube URLs and extract the video ID
     pattern = re.compile(
@@ -125,14 +128,33 @@ def check_youtube_url(url: str) -> str | None:
     )
     match = pattern.match(url)
     if not match:
+        logger.error("Invalid YouTube URL: %s", url)
+        return False
+    return True
+
+
+def get_youtube_track_name(url: str) -> str | None:
+    """Get the track name from a YouTube URL.
+
+    Args:
+        url: YouTube video URL.
+
+    Returns:
+        The track name if available, otherwise None.
+
+    """
+    if not check_youtube_url(url):
+        logger.error("Invalid YouTube URL: %s", url)
         return None
 
-    video_id = match.group("id")
-    video_url = f"https://www.youtube.com/watch?v={video_id}"
+    if url in _video_filenames:
+        # If we already have the video name, return it
+        return _video_filenames[url]
+
     try:
         ydl_opts = {"quiet": True, "skip_download": True}
         with YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(video_url, download=False)  # type: ignore[untyped-call]
+            info = ydl.extract_info(url, download=False)  # type: ignore[untyped-call]
             if info is None:
                 return None
 
@@ -152,19 +174,47 @@ if __name__ == "__main__":
     logger = logging.getLogger("youtube_audio")
     logging.basicConfig(level=logging.INFO)
 
+    import time
+
     logger.info("Starting YouTube audio extraction example...")
-    url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"  # Example URL
+    url = r"https://youtu.be/Sf_n2AOuCRA\?si\=Wy8sv3ZRl9g3L6u6"  # Long video
+    url = r"https://www.youtube.com/watch?v=dQw4w9WgXcQ"  # Short video
 
     try:
-        pcm_data = extract_audio_pcm(
-            url,
-        )
+        logger.info("First call to get track name...")
+        t0 = time.perf_counter()
+        track_name = get_youtube_track_name(url)
+        t1 = time.perf_counter()
+
         logger.info(
-            "Extracted %.3f megabytes of PCM audio data.", len(pcm_data) / (1024 * 1024)
+            "YouTube track name: %s in %.1f seconds",
+            track_name or "Invalid URL",
+            t1 - t0,
+        )
+
+        t0 = time.perf_counter()
+        pcm_data = asyncio.run(
+            extract_audio_pcm(
+                url,
+            )
+        )
+        t1 = time.perf_counter()
+
+        logger.info(
+            "Extracted %.3f megabytes of PCM audio data in %.1f seconds",
+            len(pcm_data) / (1024 * 1024),
+            t1 - t0,
         )
 
         logger.info("Second call to get track name...")
-        track_name = check_youtube_url(url)
-        logger.info("YouTube track name: %s", track_name or "Invalid URL")
+        t0 = time.perf_counter()
+        track_name = get_youtube_track_name(url)
+        t1 = time.perf_counter()
+
+        logger.info(
+            "YouTube track name: %s in %.1f seconds",
+            track_name or "Invalid URL",
+            t1 - t0,
+        )
     except RuntimeError as e:
         logger.exception("Error!", exc_info=e)

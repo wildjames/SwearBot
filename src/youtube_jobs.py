@@ -73,7 +73,7 @@ async def _play_next(vc: utils.DISCORD_VOICE_CLIENT) -> None:
 
     try:
         mixer = await utils.get_mixer_from_voice_client(vc)
-        mixer.play_youtube(url, after_play=_after_play)
+        await mixer.play_youtube(url, after_play=_after_play)
     except Exception:
         logger.exception("Error playing YouTube URL %s", url)
         # Clear the queue to avoid infinite retries
