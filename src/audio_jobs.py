@@ -6,7 +6,6 @@ import uuid
 from pathlib import Path
 
 import anyio
-import discord
 
 from . import utils
 
@@ -20,11 +19,11 @@ logger.info(
 # Track active jobs:
 #   job_id -> (VoiceClient, asyncio.Task, sound_file, min_interval, max_interval)
 loop_jobs: dict[
-    str, tuple[discord.VoiceClient, asyncio.Task[None], str, float, float]
+    str, tuple[utils.DISCORD_VOICE_CLIENT, asyncio.Task[None], str, float, float]
 ] = {}
 
 
-async def _play_sfx_loop(vc: discord.VoiceClient, job_id: str) -> None:
+async def _play_sfx_loop(vc: utils.DISCORD_VOICE_CLIENT, job_id: str) -> None:
     """Internal loop: play the given SFX on its own schedule.
 
     This function is run in a separate task and will be cancelled when the
@@ -70,7 +69,7 @@ async def _play_sfx_loop(vc: discord.VoiceClient, job_id: str) -> None:
 
 
 async def add_job(
-    vc: discord.VoiceClient,
+    vc: utils.DISCORD_VOICE_CLIENT,
     sound: str,
     min_interval: float,
     max_interval: float,
@@ -102,7 +101,9 @@ async def remove_job(job_id: str) -> None:
         "Stopped SFX job %s for sound %s in guild_id=%s", job_id, sound, vc.guild.id
     )
 
-    # Optionally disconnect if no other jobs for this guild remain
-    check = [j_vc.guild.id == vc.guild.id for j_vc, *_ in loop_jobs.values()]
-    if vc.is_connected() and not any(check):
-        await vc.disconnect(force=True)
+
+async def stop_all_jobs(vc: utils.DISCORD_VOICE_CLIENT) -> None:
+    """Stop all SFX jobs for the given voice client."""
+    jobs_to_remove = [jid for jid, (j_vc, *_) in loop_jobs.items() if j_vc == vc]
+    for job_id in jobs_to_remove:
+        await remove_job(job_id)

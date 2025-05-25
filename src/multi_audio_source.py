@@ -9,6 +9,8 @@ from typing import TypedDict
 
 from discord import AudioSource, VoiceClient
 
+from .youtube_audio import extract_audio_pcm
+
 logger = logging.getLogger(__name__)
 
 # Keep one mixer per guild
@@ -36,8 +38,11 @@ class Track(TypedDict):
 class MultiAudioSource(AudioSource):
     """A class that mixes multiple audio sources for Discord voice communication."""
 
+    SAMPLE_RATE = 48000  # 48 KHz
+    CHANNELS = 2  # Stereo
+
     # 20ms of 16-bit 48 KHz stereo PCM (48000 * 2 channels * 2 bytes * 0.02)
-    CHUNK_SIZE = int(48000 * 2 * 2 * 0.02)
+    CHUNK_SIZE = int(SAMPLE_RATE * CHANNELS * 2 * 0.02)
 
     # int16 min/max values
     MIN_VOLUME = -32768
@@ -124,6 +129,31 @@ class MultiAudioSource(AudioSource):
                 out[i] = val
 
         return out.tobytes()
+
+    def play_youtube(
+        self, url: str, after_play: Callable[[], None] | None = None
+    ) -> None:
+        """Plays a YouTube video by extracting its audio and queuing it for mixing."""
+        logger.info("Playing YouTube URL %s", url)
+
+        # extract audio from YouTube URL
+        pcm_data = extract_audio_pcm(
+            url,
+            sample_rate=self.SAMPLE_RATE,
+            channels=self.CHANNELS,
+        )
+
+        # convert bytes to array of int16 samples
+        samples = array.array("h")
+        samples.frombytes(pcm_data)
+
+        # enqueue the track
+        with self._lock:
+            self._tracks.append({"samples": samples, "pos": 0})
+
+        # call the callback if provided
+        if after_play:
+            after_play()
 
     def play_file(
         self, filename: str, after_play: Callable[[], None] | None = None

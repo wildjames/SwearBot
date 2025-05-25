@@ -21,7 +21,12 @@ logging.basicConfig(level=logging.INFO)
 intents = discord.Intents.default()
 intents.voice_states = True
 
-bot = commands.Bot(command_prefix="!", case_insensitive=True, intents=intents)
+bot = commands.Bot(
+    command_prefix="!",
+    case_insensitive=True,
+    intents=intents,
+    description="A bot for the NaughtyBoys",
+)
 
 BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN")
 if not BOT_TOKEN:
@@ -36,7 +41,10 @@ async def on_ready() -> None:
     logger.info("Logged in as %s", bot.user)
 
 
-@bot.tree.command(name="addjob", description="Add a scheduled SFX job")
+@bot.tree.command(
+    name="addjob",
+    description="Add a scheduled SFX job",
+)
 @app_commands.describe(
     sound="Filename of the sound effect (including extension)",
     min_interval="Minimum seconds between plays",
@@ -71,7 +79,7 @@ async def addjob(
     try:
         job_id = await audio_jobs.add_job(vc, sound, min_interval, max_interval)
         message = (
-            f"✅ Added job `{job_id}`: `{sound}` "
+            f"✅    Added job `{job_id}`: `{sound}` "
             f"every {min_interval:.1f}-{max_interval:.1f}s."
         )
         await interaction.response.send_message(message, ephemeral=True)
@@ -94,7 +102,7 @@ async def removejob(interaction: discord.Interaction, job_id: str) -> None:
     try:
         await audio_jobs.remove_job(job_id)
         await interaction.response.send_message(
-            f"🗑️ Removed job `{job_id}`.", ephemeral=True
+            f"🗑️    Removed job `{job_id}`.", ephemeral=True
         )
     except KeyError:
         await interaction.response.send_message(
@@ -126,6 +134,33 @@ async def listjobs(interaction: discord.Interaction) -> None:
         )
 
 
+@bot.tree.command(name="stop", description="Stop the bot, and leave the voice channel")
+async def stop(interaction: discord.Interaction) -> None:
+    """Stop the bot and leave the voice channel."""
+    if interaction.guild is None:
+        await interaction.response.send_message(
+            "This command only works in a server.", ephemeral=True
+        )
+        return
+
+    member = interaction.guild.get_member(interaction.user.id)
+    if (
+        not member
+        or not member.voice
+        or not member.voice.channel
+        or not isinstance(member.voice.channel, discord.VoiceChannel)
+    ):
+        await interaction.response.send_message(
+            "You need to be in a standard voice channel to add a job.", ephemeral=True
+        )
+        return
+    vc = await utils.ensure_connected(interaction.guild, member.voice.channel)
+
+    await vc.disconnect(force=True)
+    await audio_jobs.stop_all_jobs(vc)
+    await interaction.response.send_message("🔴    Stopped and left the voice channel.")
+
+
 @bot.tree.command(name="ping", description="Check if the bot is alive")
 async def ping(interaction: discord.Interaction) -> None:
     """Check if the bot is alive."""
@@ -147,8 +182,50 @@ async def trigger(interaction: discord.Interaction) -> None:
     mixer = await utils.get_mixer_from_interaction(interaction)
     mixer.play_file(sound)
     await interaction.followup.send(
-        f"🔊 Playing **{Path(sound).name}**!", ephemeral=True
+        f"🔊    Playing **{Path(sound).name}**!", ephemeral=True
     )
+
+
+@bot.tree.command(name="play", description="Play a youtube video audio")
+@app_commands.describe(
+    url="YouTube video URL",
+)
+async def play(
+    interaction: discord.Interaction,
+    url: str,
+) -> None:
+    """Play audio from a YouTube video in the voice channel."""
+    await interaction.response.defer(thinking=True)
+    if interaction.guild is None:
+        await interaction.followup.send(
+            "This command can only be used in a server.", ephemeral=True
+        )
+        return
+
+    member = interaction.guild.get_member(interaction.user.id)
+    if (
+        not member
+        or not member.voice
+        or not member.voice.channel
+        or not isinstance(member.voice.channel, discord.VoiceChannel)
+    ):
+        await interaction.followup.send(
+            "You need to be in a standard voice channel to play audio.",
+            ephemeral=True,
+        )
+        return
+
+    vc = await utils.ensure_connected(interaction.guild, member.voice.channel)
+
+    try:
+        mixer = await utils.get_mixer_from_voice_client(vc)
+        mixer.play_youtube(url)
+        await interaction.followup.send(
+            f"🎵    Playing audio from **{url}**!", ephemeral=True
+        )
+    except Exception as e:
+        logger.exception("Error playing YouTube audio")
+        await interaction.followup.send(f"Failed to play audio: {e}", ephemeral=True)
 
 
 def start() -> None:
@@ -156,7 +233,10 @@ def start() -> None:
     if not BOT_TOKEN:
         msg = "DISCORD_BOT_TOKEN environment variable is not set."
         raise ValueError(msg)
-    bot.run(BOT_TOKEN)
+
+    bot.run(
+        BOT_TOKEN,
+    )
 
 
 if __name__ == "__main__":

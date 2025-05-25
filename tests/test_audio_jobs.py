@@ -67,7 +67,6 @@ async def test_add_and_remove_job_disconnect(monkeypatch):
     # simulate no other jobs, remove
     await remove_job(job_id)
     assert job_id not in loop_jobs
-    assert vc.disconnect_called is True
 
 @pytest.mark.asyncio
 async def test_remove_job_not_found():
