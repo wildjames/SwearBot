@@ -178,9 +178,8 @@ async def play(
     url: str,
 ) -> None:
     """Enqueue a YouTube URL; starts playback if idle."""
-    await interaction.response.defer(thinking=True, ephemeral=False)
     try:
-        await interaction.response.defer(thinking=True)
+        await interaction.response.defer(thinking=True, ephemeral=False)
     except discord.NotFound:
         # if this ever fires, the interaction token already expired
         return
