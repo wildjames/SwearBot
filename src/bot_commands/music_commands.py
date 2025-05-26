@@ -44,6 +44,8 @@ class MusicCommands(commands.Cog):
                 "Join a voice channel first.", ephemeral=True
             )
 
+        # TODO: If this is not a valid YouTube URL, we should handle it gracefully
+
         vc = await discord_utils.ensure_connected(
             interaction.guild,
             member.voice.channel,

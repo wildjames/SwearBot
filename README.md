@@ -15,12 +15,14 @@ These are smaller jobs, that shouldn't take too long to knock down individually.
 - [ ] When downloading youtube audio, download to `/tmp` and only move the completed file in to the audio cache when it's ready. Also, don't start a new download job for a file which is in progress. When the bot exits, cleanup should purge that directory!
 - [ ] Add a cronjob to remove cached audio files that are over a week old
 - [ ] Report playback duration in the queue list command, and total queue duration as well. Add a method to the audio mixer class to do that.
+- [ ] If the play command doesnt get a valid youtube url, reject it and inform the user.
 
 # Mid-term TODO list
 
 These are things that will likely take over an hour
 
 - [ ] Youtube playlist support
+- [ ] Youtube age restricts some content, so I need to implement auth
 - [ ] Multiple people sending commands at once seems to not work
 - [ ] Commands need to have guard clauses abstracted out into some discord utility functions
 - [ ] Send a message when a new track starts to play
