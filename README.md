@@ -1,3 +1,5 @@
+[![Coverage Status](https://coveralls.io/repos/github/wildjames/SwearBot/badge.svg?branch=main)](https://coveralls.io/github/wildjames/SwearBot?branch=main)
+
 # TODO: Write a README
 
 I got the soundbites from [here](https://drive.google.com/drive/folders/1dr2XcAQAuCPJqZQkCRKa4Aq8IDOH8ZIz)
