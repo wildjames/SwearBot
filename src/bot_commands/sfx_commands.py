@@ -184,7 +184,7 @@ class SFXCommands(commands.Cog):
             return
 
         mixer = await discord_utils.get_mixer_from_interaction(interaction)
-        mixer.clear_tracks()
+        mixer.clear_sfx()
         mixer.pause()
         await interaction.response.send_message("⏹️    Stopped all SFX playback.")
 
@@ -217,6 +217,7 @@ class SFXCommands(commands.Cog):
             interaction.guild, member.voice.channel
         )
         mixer = await discord_utils.get_mixer_from_interaction(interaction)
+
         try:
             mixer.play_file(sound)
             if not vc.is_playing():
