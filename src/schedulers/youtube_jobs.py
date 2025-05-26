@@ -79,6 +79,10 @@ async def _play_next(vc: discord_utils.DISCORD_VOICE_CLIENT) -> None:
     try:
         mixer = await discord_utils.get_mixer_from_voice_client(vc)
         await mixer.play_youtube(url, after_play=_after_play)
+        # After transmitting silence, discord stops calling the read() method.
+        # So, we need to call the play method again to get it going again.
+        if not vc.is_playing():
+            vc.play(mixer)
     except Exception:
         logger.exception("Error playing YouTube URL %s", url)
         # Clear the queue to avoid infinite retries

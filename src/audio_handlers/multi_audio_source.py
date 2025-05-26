@@ -37,7 +37,7 @@ async def ensure_mixer(vc: VoiceClient) -> "MultiAudioSource":
     gid = vc.guild.id
     if gid not in _mixers:
         mixer = MultiAudioSource()
-        vc.play(mixer)  # start the background mixer thread
+        vc.play(mixer, signal_type="music")  # start the background mixer thread
         _mixers[gid] = mixer
         logger.info("Created mixer for guild %s", gid)
     return _mixers[gid]
@@ -103,15 +103,57 @@ class MultiAudioSource(AudioSource):
         """
         return self._stopped
 
+    @property
+    def is_playing(self) -> bool:
+        """Check if the mixer has any active tracks or sound effects.
+
+        Returns:
+            True if there are tracks or sound effects queued; False otherwise.
+
+        """
+        return not self._stopped and (self.num_tracks > 0 or self.num_sfx > 0)
+
+    @property
+    def num_tracks(self) -> int:
+        """Get the number of music tracks currently queued in the mixer.
+
+        Returns:
+            The count of active music tracks.
+
+        """
+        return len(self._tracks)
+
+    @property
+    def num_sfx(self) -> int:
+        """Get the number of sound effects currently queued in the mixer.
+
+        Returns:
+            The count of active sound effects.
+
+        """
+        return len(self._sfx)
+
+    @property
+    def num_playback_streams(self) -> int:
+        """Get the total number of active tracks and sound effects.
+
+        Returns:
+            The sum of music tracks and sound effects currently queued.
+
+        """
+        return len(self._tracks) + len(self._sfx)
+
     def resume(self) -> None:
         """Resume playback if the mixer was paused."""
         logger.info("Resuming MultiAudioSource")
-        self._stopped = False
+        with self._lock:
+            self._stopped = False
 
     def pause(self) -> None:
         """Pause playback, halting output until resumed."""
         logger.info("Pausing MultiAudioSource")
-        self._stopped = True
+        with self._lock:
+            self._stopped = True
 
     def _mix_samples(self) -> array.array[int]:
         """Combine PCM data from all active tracks and sound effects.
@@ -170,7 +212,8 @@ class MultiAudioSource(AudioSource):
             A bytes object of length CHUNK_SIZE containing 16-bit PCM data.
 
         """
-        if self._stopped:
+        if self.is_stopped:
+            logger.info("STOPPED")
             return b""
 
         with self._lock:
@@ -192,7 +235,6 @@ class MultiAudioSource(AudioSource):
         logger.info("Stopping MultiAudioSource")
         self.clear_sfx()
         self.clear_tracks()
-        self.pause()
 
     def clear_sfx(self) -> None:
         """Remove all queued sound effects immediately."""
@@ -206,8 +248,8 @@ class MultiAudioSource(AudioSource):
         logger.info("Stopping all tracks")
         with self._lock:
             self._tracks.clear()
-            self._stopped = True
             logger.info("All tracks stopped")
+        self.pause()
 
     async def play_youtube(
         self,
@@ -232,7 +274,6 @@ class MultiAudioSource(AudioSource):
 
         """
         logger.info("Queueing YouTube %s", url)
-        self.resume()
 
         await fetch_audio_pcm(
             url,
@@ -253,8 +294,10 @@ class MultiAudioSource(AudioSource):
             self._tracks.append(
                 {"samples": samples, "pos": 0, "after_play": after_play}
             )
-        self._stopped = False
+
+        logger.info("Loaded data for URL: %s", url)
         logger.info("Now %d tracks in mixer", len(self._tracks))
+        self.resume()
 
     def play_file(
         self, filename: str, after_play: Callable[[], None] | None = None
@@ -312,12 +355,10 @@ class MultiAudioSource(AudioSource):
         samples.frombytes(pcm_data)
 
         with self._lock:
-            self._tracks.append(
-                {"samples": samples, "pos": 0, "after_play": after_play}
-            )
+            self._sfx.append({"samples": samples, "pos": 0, "after_play": after_play})
 
         self.resume()
-        logger.info("There are now %d tracks in the mixer", len(self._tracks))
+        logger.info("There are now %d tracks in the mixer", len(self._sfx))
 
     def skip_current_tracks(self) -> None:
         """Immediately end playback of all current tracks and trigger callbacks.

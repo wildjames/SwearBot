@@ -115,21 +115,21 @@ class SFXCommands(commands.Cog):
         """List all available sound effects."""
         await interaction.response.defer(thinking=True)
         if interaction.guild is None:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "This command only works in a server.", ephemeral=True
             )
             return
 
         sound_files = audio_sfx_jobs.SOUND_FILES
         if not sound_files:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "No sound effects available.", ephemeral=True
             )
             return
 
         # Format the list of sound files
         formatted_sounds = "\n".join(f"- {Path(sound).name}" for sound in sound_files)
-        await interaction.response.send_message(
+        await interaction.followup.send(
             f"**Available sound effects:**\n{formatted_sounds}", ephemeral=True
         )
 
@@ -148,11 +148,87 @@ class SFXCommands(commands.Cog):
 
         # pick & fire off the effect
         sound = random.choice(audio_sfx_jobs.SOUND_FILES)  # noqa: S311
+
+        member = interaction.guild.get_member(interaction.user.id)
+        if (
+            not member
+            or not member.voice
+            or not member.voice.channel
+            or not isinstance(member.voice.channel, discord.VoiceChannel)
+        ):
+            await interaction.response.send_message(
+                "You need to be in a standard voice channel to add a job.",
+                ephemeral=True,
+            )
+            return
+
+        vc = await discord_utils.ensure_connected(
+            interaction.guild, member.voice.channel
+        )
         mixer = await discord_utils.get_mixer_from_interaction(interaction)
+
         mixer.play_file(sound)
+        if not vc.is_playing():
+            vc.play(mixer)
         await interaction.followup.send(
             f"🔊    Playing **{Path(sound).name}**", ephemeral=False
         )
+
+    @app_commands.command(name="stop_sfx", description="Stop all SFX playback")
+    async def stop_sfx(self, interaction: discord.Interaction) -> None:
+        """Stop all sound effect playback in the voice channel."""
+        if interaction.guild is None:
+            await interaction.response.send_message(
+                "This command only works in a server.", ephemeral=True
+            )
+            return
+
+        mixer = await discord_utils.get_mixer_from_interaction(interaction)
+        mixer.clear_tracks()
+        mixer.pause()
+        await interaction.response.send_message("⏹️    Stopped all SFX playback.")
+
+    @app_commands.command(
+        name="play_sfx", description="Play a sound effect immediately"
+    )
+    @app_commands.describe(sound="Filename of the sound effect (including extension)")
+    async def play_sfx(self, interaction: discord.Interaction, sound: str) -> None:
+        """Play a sound effect immediately in the voice channel."""
+        if interaction.guild is None:
+            await interaction.response.send_message(
+                "This command only works in a server.", ephemeral=True
+            )
+            return
+
+        member = interaction.guild.get_member(interaction.user.id)
+        if (
+            not member
+            or not member.voice
+            or not member.voice.channel
+            or not isinstance(member.voice.channel, discord.VoiceChannel)
+        ):
+            await interaction.response.send_message(
+                "You need to be in a standard voice channel to add a job.",
+                ephemeral=True,
+            )
+            return
+
+        vc = await discord_utils.ensure_connected(
+            interaction.guild, member.voice.channel
+        )
+        mixer = await discord_utils.get_mixer_from_interaction(interaction)
+        try:
+            mixer.play_file(sound)
+            if not vc.is_playing():
+                vc.play(mixer)
+
+            await interaction.response.send_message(
+                f"🔊    Playing sound effect: **{sound}**", ephemeral=False
+            )
+        except FileNotFoundError:
+            await interaction.response.send_message(
+                f"❌    Sound effect `{sound}` not found.", ephemeral=True
+            )
 
 
 async def setup(bot: commands.Bot) -> None:

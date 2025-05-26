@@ -66,9 +66,9 @@ class MusicCommands(commands.Cog):
         queue = await youtube_jobs.list_queue(vc)
         pos = len(queue)
         msg = (
-            f"🎵 Queued **{track_name}** at position {pos}."
+            f"🎵    Queued **{track_name}** at position {pos}."
             if pos > 1
-            else f"▶️ Now playing **{track_name}**"
+            else f"▶️    Now playing **{track_name}**"
         )
         await interaction.followup.send(msg)
 
@@ -150,7 +150,7 @@ class MusicCommands(commands.Cog):
 
         track_name = youtube_audio.get_youtube_track_name(track_url)
         await interaction.response.send_message(
-            f"⏭️ Skipped to next track: {track_name}",
+            f"⏭️    Skipped to next track: {track_name}",
             ephemeral=False,
         )
 
@@ -182,7 +182,7 @@ class MusicCommands(commands.Cog):
         )
         await youtube_jobs.stop(vc)
         await interaction.response.send_message(
-            "⏹️ Stopped and cleared YouTube queue.", ephemeral=False
+            "⏹️    Stopped and cleared YouTube queue.", ephemeral=False
         )
 
     @app_commands.command(name="clear_queue", description="Clear the YouTube queue")
@@ -215,7 +215,7 @@ class MusicCommands(commands.Cog):
         logger.info("queue after clearing: %s", current_queue)
 
         await interaction.response.send_message(
-            "🗑️ Cleared the YouTube queue.", ephemeral=False
+            "🗑️    Cleared the YouTube queue.", ephemeral=False
         )
 
 

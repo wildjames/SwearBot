@@ -103,8 +103,8 @@ def test_play_file_success(monkeypatch, tmp_path):
     src.play_file(str(dummy), after_play=after_play)
 
     # One track enqueued
-    assert len(src._tracks) == 1
-    track = src._tracks[0]
+    assert len(src._sfx) == 1
+    track = src._sfx[0]
 
     # Samples converted correctly
     assert track["samples"] == array.array("h", [1, 2])
@@ -153,7 +153,7 @@ async def test_ensure_mixer_creates_and_reuses():
             self.guild = DummyGuild(id)
             self.played = []
 
-        def play(self, source):
+        def play(self, source, **kwargs):
             calls.append(source)
             self.played.append(source)
 
@@ -187,8 +187,7 @@ async def test_ensure_mixer_multiple_guilds(monkeypatch):
             self.guild = DummyGuild(id)
             self.played = []
 
-        def play(self, source):
-            # record that play() was called
+        def play(self, source, **kwargs):
             self.played.append(source)
 
     # First guild should create a new mixer and call play()
