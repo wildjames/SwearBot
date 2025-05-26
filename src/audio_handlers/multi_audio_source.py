@@ -21,7 +21,19 @@ _mixers: dict[int, "MultiAudioSource"] = {}
 
 
 async def ensure_mixer(vc: VoiceClient) -> "MultiAudioSource":
-    """Attach (or reuse) a MultiAudioSource on this VoiceClient."""
+    """Get or create a MultiAudioSource mixer for the given VoiceClient.
+
+    If a mixer does not already exist for the guild, a new one is instantiated,
+    started on the VoiceClient, and stored. Otherwise, the existing mixer
+    is returned.
+
+    Args:
+        vc: The Discord VoiceClient to attach the mixer to.
+
+    Returns:
+        The MultiAudioSource instance for the guild.
+
+    """
     gid = vc.guild.id
     if gid not in _mixers:
         mixer = MultiAudioSource()
@@ -32,7 +44,14 @@ async def ensure_mixer(vc: VoiceClient) -> "MultiAudioSource":
 
 
 class Track(TypedDict):
-    """Represents an audio track with its samples and current playback position."""
+    """A representation of an audio track in the mixer.
+
+    Attributes:
+        samples: An array of PCM samples (int16) for playback.
+        pos: The current read position in the samples array.
+        after_play: Optional callback invoked when playback completes.
+
+    """
 
     samples: array.array[int]
     pos: int
@@ -40,78 +59,89 @@ class Track(TypedDict):
 
 
 class MultiAudioSource(AudioSource):
-    """A class that mixes multiple audio sources for Discord voice communication."""
+    """An audio source that mixes multiple PCM tracks and sound effects for Discord.
 
-    SAMPLE_RATE = 48000  # 48 KHz
-    CHANNELS = 2  # Stereo
+    This class decodes and buffers audio from files or YouTube URLs, mixes
+    them in real time, and provides fixed-size PCM chunks for Discord voice.
+    """
 
-    CHUNK_DURATION = 0.02  # 20ms
-
-    BYTE_SIZE = 2  # 16-bit samples, so 2 bytes per sample
-
-    # 20ms of 16-bit 48 KHz stereo PCM (48000 * 2 channels * 2 bytes * 0.02)
+    SAMPLE_RATE = 48000  # Sample rate in Hz
+    CHANNELS = 2  # Number of audio channels (stereo)
+    CHUNK_DURATION = 0.02  # Duration of each chunk in seconds
+    BYTE_SIZE = 2  # Bytes per sample (16-bit PCM)
     CHUNK_SIZE = int(SAMPLE_RATE * CHANNELS * BYTE_SIZE * CHUNK_DURATION)
-
-    # int16 min/max values
     MIN_VOLUME = -32768
     MAX_VOLUME = 32767
 
     def __init__(self) -> None:
-        """Initializes a new MultiAudioSource instance."""
-        # protect track list against concurrent play_file() calls
+        """Initialize the mixer, setting up track storage and synchronization."""
         self._lock = threading.Lock()
         self._tracks: list[Track] = []
         self._sfx: list[Track] = []
         self._stopped = False
 
     def is_opus(self) -> bool:
-        """Return whether this audio source is encoded in Opus format."""
+        """Indicate that output data is raw PCM, not Opus-encoded.
+
+        Returns:
+            False always, since this source provides raw PCM bytes.
+
+        """
         return False
 
     def cleanup(self) -> None:
-        """Clean up the audio source by clearing all tracks and marking stopped."""
-        self.stop()
+        """Perform cleanup by clearing all queued tracks and pausing playback."""
+        self.clear_queue()
 
-    def _mix_samples(self) -> array.array[int]:
-        """Mixes the samples of all tracks together.
-
-        Args:
-        ----
-            tracks: A list of tracks to mix.
+    @property
+    def is_stopped(self) -> bool:
+        """Query whether the mixer is currently paused or stopped.
 
         Returns:
-        -------
-            A tuple containing the mixed samples and the updated list of tracks.
+            True if playback is paused or no tracks are active; False otherwise.
 
         """
-        # create a new array for the mixed samples. Use int32 to avoid overflow.
-        total = array.array("i", [0] * (self.CHUNK_SIZE // 2))
+        return self._stopped
 
-        # New track and sfx lists to hold tracks that are still playing
+    def resume(self) -> None:
+        """Resume playback if the mixer was paused."""
+        logger.info("Resuming MultiAudioSource")
+        self._stopped = False
+
+    def pause(self) -> None:
+        """Pause playback, halting output until resumed."""
+        logger.info("Pausing MultiAudioSource")
+        self._stopped = True
+
+    def _mix_samples(self) -> array.array[int]:
+        """Combine PCM data from all active tracks and sound effects.
+
+        Iterates through each track, extracts the next chunk of samples,
+        sums them into an accumulator buffer (int32 to prevent overflow),
+        advances track positions, and invokes any completion callbacks.
+
+        Returns:
+            An array of mixed 32-bit sample sums for the next output chunk.
+
+        """
+        total = array.array("i", [0] * (self.CHUNK_SIZE // 2))
         new_tracks: list[Track] = []
         new_sfx: list[Track] = []
 
-        # mix all tracks and sfx together
         for track in self._tracks + self._sfx:
             samples = track["samples"]
-
-            # Get the range of samples to mix
             pos = track["pos"]
             end = pos + (self.CHUNK_SIZE // 2)
 
-            # if the track is near the end, pad it with zeros
             if end > len(samples):
                 pad = array.array("h", [0] * (end - len(samples)))
                 samples.extend(pad)
 
             chunk = samples[pos:end]
-
             for i, s in enumerate(chunk):
                 total[i] += s
-
             track["pos"] = end
 
-            # Check if track has finished
             if end >= len(samples):
                 callback = track.get("after_play")
                 if callback:
@@ -128,22 +158,26 @@ class MultiAudioSource(AudioSource):
 
         self._tracks = new_tracks
         self._sfx = new_sfx
-
         return total
 
     def read(self) -> bytes:
-        """Called by discord.py every ~20ms from a background thread.
+        """Provide the next PCM audio chunk for Discord to send.
 
-        Mixes together all active tracks and returns exactly CHUNK_SIZE bytes.
+        This is invoked periodically by discord.py (approximately every
+        20ms). If playback is paused, returns an empty byte string.
+
+        Returns:
+            A bytes object of length CHUNK_SIZE containing 16-bit PCM data.
+
         """
         if self._stopped:
             return b""
 
         with self._lock:
-            total = self._mix_samples()
+            mixed = self._mix_samples()
 
         out = array.array("h", [0] * (self.CHUNK_SIZE // 2))
-        for i, val in enumerate(total):
+        for i, val in enumerate(mixed):
             if val > self.MAX_VOLUME:
                 out[i] = self.MAX_VOLUME
             elif val < self.MIN_VOLUME:
@@ -153,26 +187,22 @@ class MultiAudioSource(AudioSource):
 
         return out.tobytes()
 
-    def stop(self) -> None:
-        """Stops the audio source by clearing all tracks and marking it as stopped."""
+    def clear_queue(self) -> None:
+        """Stop all playback and clear both music tracks and sound effects."""
         logger.info("Stopping MultiAudioSource")
-        self.stop_sfx()
-        self.stop_tracks()
+        self.clear_sfx()
+        self.clear_tracks()
+        self.pause()
 
-    def stop_sfx(self) -> None:
-        """Stops all sound effects by clearing the sfx track list."""
+    def clear_sfx(self) -> None:
+        """Remove all queued sound effects immediately."""
         logger.info("Stopping all sound effects")
         with self._lock:
             self._sfx.clear()
             logger.info("All sound effects stopped")
 
-    @property
-    def is_stopped(self) -> bool:
-        """Checks if the audio source is stopped."""
-        return self._stopped
-
-    def stop_tracks(self) -> None:
-        """Stops all tracks by clearing the track list and marking it as stopped."""
+    def clear_tracks(self) -> None:
+        """Remove all queued music tracks and pause playback."""
         logger.info("Stopping all tracks")
         with self._lock:
             self._tracks.clear()
@@ -186,10 +216,24 @@ class MultiAudioSource(AudioSource):
         password: str | None = None,
         after_play: Callable[[], None] | None = None,
     ) -> None:
-        """Queues a YouTube audio track for playback after decoding."""
-        logger.info("Queueing YouTube %s", url)
+        """Decode and queue audio from a YouTube URL for playback.
 
-        # Check if the URL is already cached, await for fetch if not
+        Downloads or retrieves cached PCM data for the given URL, converts
+        it into a sample array, and appends it to the mixer queue.
+
+        Args:
+            url: The YouTube video URL to play.
+            username: Optional YouTube account username for private content.
+            password: Optional YouTube account password.
+            after_play: Optional callback to invoke when playback ends.
+
+        Raises:
+            RuntimeError: If the PCM cache is missing after decoding.
+
+        """
+        logger.info("Queueing YouTube %s", url)
+        self.resume()
+
         await fetch_audio_pcm(
             url,
             sample_rate=self.SAMPLE_RATE,
@@ -197,14 +241,11 @@ class MultiAudioSource(AudioSource):
             username=username,
             password=password,
         )
-
-        # read back from disk
         pcm = get_audio_pcm(url)
         if pcm is None:
             msg = f"Cached file for {url} missing"
             raise RuntimeError(msg)
 
-        # Make sure we play 16bit PCM data
         samples = array.array("h")
         samples.frombytes(pcm)
 
@@ -218,20 +259,31 @@ class MultiAudioSource(AudioSource):
     def play_file(
         self, filename: str, after_play: Callable[[], None] | None = None
     ) -> None:
-        """Plays an audio file by decoding it with ffmpeg and queues it for mixing."""
+        """Decode an audio file via ffmpeg and enqueue it for mixing.
+
+        Uses ffmpeg to convert the specified file into 16-bit 48kHz stereo PCM,
+        reads the output, and adds the samples to the mixer queue.
+
+        Args:
+            filename: Path to the audio file to play.
+            after_play: Optional callback invoked when the file finishes playing.
+
+        Raises:
+            FileNotFoundError: If the file does not exist.
+            RuntimeError: If ffmpeg is not installed or decoding fails.
+
+        """
         logger.info("Playing file %s", filename)
 
         if not Path(filename).is_file():
             msg = f"{filename!r} does not exist"
             raise FileNotFoundError(msg)
 
-        # check if ffmpeg is in PATH
         ffmpeg_path = shutil.which("ffmpeg")
         if ffmpeg_path is None:
             msg = "ffmpeg not found in PATH"
             raise RuntimeError(msg)
 
-        # use ffmpeg to decode to s16le
         proc = subprocess.Popen(  # noqa: S603 We're safe here
             [
                 ffmpeg_path,
@@ -242,9 +294,9 @@ class MultiAudioSource(AudioSource):
                 "-f",
                 "s16le",
                 "-ar",
-                "48000",
+                str(self.SAMPLE_RATE),
                 "-ac",
-                "2",
+                str(self.CHANNELS),
                 "pipe:1",
             ],
             stdout=subprocess.PIPE,
@@ -256,32 +308,28 @@ class MultiAudioSource(AudioSource):
             msg = f"ffmpeg failed: {err.decode(errors='ignore')}"
             raise RuntimeError(msg)
 
-        # convert bytes to array of int16 samples
         samples = array.array("h")
         samples.frombytes(pcm_data)
 
-        # enqueue the track
         with self._lock:
             self._tracks.append(
                 {"samples": samples, "pos": 0, "after_play": after_play}
             )
 
-        self._stopped = False
+        self.resume()
         logger.info("There are now %d tracks in the mixer", len(self._tracks))
 
     def skip_current_tracks(self) -> None:
-        """Skips the currently playing track by moving its position to the end.
+        """Immediately end playback of all current tracks and trigger callbacks.
 
-        Triggers its callback.
+        Removes all queued music tracks, sets their positions to the end to
+        ensure any after_play callbacks are invoked, then calls each callback.
         """
         with self._lock:
-            # Loop over all tracks and skip them
             logger.info("Skipping current tracks")
             while self._tracks:
                 track = self._tracks.pop(0)
-                # move position to end
                 track["pos"] = len(track["samples"])
-                # trigger after_play callback if present
                 callback = track.get("after_play")
                 if callback:
                     try:

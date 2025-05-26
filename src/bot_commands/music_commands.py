@@ -155,10 +155,10 @@ class MusicCommands(commands.Cog):
         )
 
     @app_commands.command(
-        name="stopmusic",
+        name="stop_music",
         description="Stop playback and clear YouTube queue",
     )
-    async def stopmusic(self, interaction: discord.Interaction) -> None:
+    async def stop_music(self, interaction: discord.Interaction) -> None:
         """Stop the current YouTube track and clear all queued tracks."""
         if interaction.guild is None:
             await interaction.response.send_message(
@@ -185,8 +185,8 @@ class MusicCommands(commands.Cog):
             "⏹️ Stopped and cleared YouTube queue.", ephemeral=False
         )
 
-    @app_commands.command(name="clearqueue", description="Clear the YouTube queue")
-    async def clearqueue(self, interaction: discord.Interaction) -> None:
+    @app_commands.command(name="clear_queue", description="Clear the YouTube queue")
+    async def clear_queue(self, interaction: discord.Interaction) -> None:
         """Remove all queued YouTube tracks."""
         if interaction.guild is None:
             await interaction.response.send_message(

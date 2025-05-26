@@ -105,7 +105,7 @@ async def skip(vc: discord_utils.DISCORD_VOICE_CLIENT) -> None:
 
 
 async def clear_queue(vc: discord_utils.DISCORD_VOICE_CLIENT) -> None:
-    """Clear all queued tracks for the voice client."""
+    """Clear all queued tracks for the voice client. Inlcudes current playback."""
     if vc.guild.id in youtube_queue:
         youtube_queue.pop(vc.guild.id, None)
         logger.info("Cleared YouTube queue for guild_id=%s", vc.guild.id)
@@ -121,7 +121,8 @@ async def stop(vc: discord_utils.DISCORD_VOICE_CLIENT) -> None:
     # Stop current playback
     mixer = await discord_utils.get_mixer_from_voice_client(vc)
     try:
-        mixer.stop()
+        mixer.clear_tracks()
+        mixer.pause()
     except Exception:
         logger.exception("Error stopping playback for guild_id=%s", vc.guild.id)
     # Clear queue

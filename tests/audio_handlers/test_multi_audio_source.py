@@ -314,28 +314,28 @@ def test_stop_sfx_and_stop_tracks_and_stop():
     src._stopped = False
 
     # stop_sfx clears only sfx
-    src.stop_sfx()
+    src.clear_sfx()
     assert src._sfx == []
     assert src._tracks == [4, 5, 6]
 
     # stop_tracks clears tracks and sets stopped
-    src.stop_tracks()
+    src.clear_tracks()
     assert src._tracks == []
     assert src._stopped is True
 
     # stop() should invoke both in sequence
     calls = []
     # monkeypatch instance methods
-    mas.MultiAudioSource.stop_sfx = lambda self: calls.append("sfx")
-    mas.MultiAudioSource.stop_tracks = lambda self: calls.append("tracks")
+    mas.MultiAudioSource.clear_sfx = lambda self: calls.append("sfx")
+    mas.MultiAudioSource.clear_tracks = lambda self: calls.append("tracks")
     src2 = MultiAudioSource()
-    src2.stop()
+    src2.clear_queue()
     assert calls == ["sfx", "tracks"]
 
 
 def test_cleanup_just_calls_stop(monkeypatch):
     src = MultiAudioSource()
     called = []
-    monkeypatch.setattr(src, "stop", lambda: called.append(True))
+    monkeypatch.setattr(src, "clear_queue", lambda: called.append(True))
     src.cleanup()
     assert called == [True]

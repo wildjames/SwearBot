@@ -281,11 +281,15 @@ async def test_stop_success(monkeypatch, dummy_logger):
     class Mixer:
         def __init__(self):
             self.stopped = False
-        def stop(self):
+        def clear_tracks(self):
             self.stopped = True
 
     mixer = Mixer()
-    monkeypatch.setattr(discord_utils, "get_mixer_from_voice_client", lambda vc: asyncio.sleep(0, result=mixer))
+    monkeypatch.setattr(
+        discord_utils,
+        "get_mixer_from_voice_client",
+        lambda vc: asyncio.sleep(0, result=mixer)
+    )
 
     await ytj.stop(vc)
     assert mixer.stopped
