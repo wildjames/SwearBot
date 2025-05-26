@@ -113,6 +113,7 @@ class SFXCommands(commands.Cog):
     @app_commands.command(name="list_sfx", description="List available sound effects")
     async def list_sfx(self, interaction: discord.Interaction) -> None:
         """List all available sound effects."""
+        await interaction.response.defer(thinking=True)
         if interaction.guild is None:
             await interaction.response.send_message(
                 "This command only works in a server.", ephemeral=True
