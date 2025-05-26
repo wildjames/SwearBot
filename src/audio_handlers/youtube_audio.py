@@ -1,6 +1,9 @@
 import asyncio
+import atexit
 import logging
+import os
 import re
+import shutil
 from pathlib import Path
 from typing import Any, cast
 
@@ -12,15 +15,30 @@ logger = logging.getLogger(__name__)
 DEFAULT_SAMPLE_RATE = 48000  # Default sample rate for PCM audio
 DEFAULT_CHANNELS = 2  # Default number of audio channels (stereo)
 
+AUDIO_CACHE_DIR = os.getenv("AUDIO_CACHE_DIR", "./audio_cache")
+AUDIO_DOWNLOAD_DIR = os.getenv("AUDIO_DOWNLOAD_DIR", "/tmp/youtube_audio_tmp")  # noqa: S108
+
 # Directory for caching PCM audio files
-audio_cache_dir = Path("./audio_cache")
+audio_cache_dir = Path(AUDIO_CACHE_DIR).resolve()
 audio_cache_dir.mkdir(parents=True, exist_ok=True)
 
-# In-memory mapping of URL to cached file path
-_url_cache: dict[str, Path] = {}
+# Temporary directory for in-progress downloads
+audio_tmp_dir = Path(AUDIO_DOWNLOAD_DIR).resolve()
+audio_tmp_dir.mkdir(parents=True, exist_ok=True)
+
+
+# Cleanup temp directory on exit
+def _cleanup_tmp() -> None:
+    shutil.rmtree(audio_tmp_dir, ignore_errors=True)
+
+
+atexit.register(_cleanup_tmp)
 
 # Dictionary to store video filenames by URL
 _video_filenames: dict[str, str] = {}
+
+# Locks to prevent multiple simultaneous downloads of the same URL
+_download_locks: dict[str, asyncio.Lock] = {}
 
 # Regex to extract YouTube video ID
 _YT_ID_RE = re.compile(
@@ -66,8 +84,8 @@ async def fetch_audio_pcm(
     """Download and cache PCM audio from a YouTube URL.
 
     If the audio is already cached, it will return the cached file path.
-    If not cached, it will download the audio, convert it to PCM format,
-    and save it to the cache directory.
+    If not cached, it will download the audio to a temp dir, convert it to
+    PCM format, and move it into the cache directory upon success.
 
     Args:
         url: YouTube video URL.
@@ -81,101 +99,107 @@ async def fetch_audio_pcm(
 
     Raises:
         RuntimeError: On download or conversion failure.
+        NotImplementedError: If authentication is requested.
 
     """
     cache_path = _get_cache_path(url, sample_rate, channels)
-    # Skip if already cached
+    # Return immediately if already cached
     if cache_path.exists():
         logger.debug("Using cached audio at %s", cache_path)
-        _url_cache[url] = cache_path
         return cache_path
 
     if username or password:
         msg = "YouTube authentication is not implemented yet."
         raise NotImplementedError(msg)
 
-    # Prepare yt-dlp options
-    ydl_opts: dict[str, Any] = {
-        "format": "bestaudio/best",
-        "quiet": True,
-        "nocheckcertificate": True,
-        "ignoreerrors": True,
-        "no_warnings": True,
-    }
+    # Prevent concurrent downloads of the same URL
+    lock = _download_locks.setdefault(url, asyncio.Lock())
+    async with lock:
+        # Double-check cache inside lock
+        if cache_path.exists():
+            logger.debug("Using cached audio at %s", cache_path)
+            return cache_path
 
-    with YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url, download=False)  # type: ignore  # noqa: PGH003
-        if not info:
-            msg = f"Could not extract info from {url}"
+        # Prepare yt-dlp options
+        ydl_opts: dict[str, Any] = {
+            "format": "bestaudio/best",
+            "quiet": True,
+            "nocheckcertificate": True,
+            "ignoreerrors": True,
+            "no_warnings": True,
+        }
+
+        with YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)  # type: ignore  # noqa: PGH003
+            if not info:
+                msg = f"Could not extract info from {url}"
+                raise RuntimeError(msg)
+
+            info = cast("dict[str, Any]", info) if isinstance(info, dict) else {}
+            audio_url = cast("str", info.get("url"))
+
+            if not audio_url:
+                msg = f"No audio URL found in info for {url}"
+                raise RuntimeError(msg)
+
+            filename = cast(
+                "str",
+                ydl.prepare_filename(info, outtmpl="%(title)s"),  # type: ignore[no-untyped-call]
+            )
+            if not filename:
+                msg = "No filename found in extracted info."
+                raise RuntimeError(msg)
+            logger.debug("Extracted filename: %s", filename)
+            _video_filenames[url] = filename
+
+        # Download & convert via ffmpeg into a temp file
+        temp_path = audio_tmp_dir / (cache_path.name + ".part")
+        cmd: list[str] = [
+            "ffmpeg",
+            "-y",
+            "-i",
+            audio_url,
+            "-f",
+            "s16le",
+            "-acodec",
+            "pcm_s16le",
+            "-ac",
+            str(channels),
+            "-ar",
+            str(sample_rate),
+            str(temp_path),
+        ]
+
+        t0 = asyncio.get_event_loop().time()
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+
+        _out, err = await proc.communicate()
+        if proc.returncode != 0:
+            temp_path.unlink(missing_ok=True)
+            msg = f"ffmpeg failed: {err.decode(errors='ignore')}"
             raise RuntimeError(msg)
+        # Move completed file into cache
+        temp_path.replace(cache_path)
+        t1 = asyncio.get_event_loop().time()
 
-        info = cast("dict[str, Any]", info) if isinstance(info, dict) else {}
-        audio_url = cast("str", info.get("url"))
-
-        if not audio_url:
-            msg = f"No audio URL found in info for {url}"
-            raise RuntimeError(msg)
-
-        filename = cast("str", ydl.prepare_filename(info, outtmpl="%(title)s"))  # type: ignore[no-untyped-call]
-        if not filename:
-            msg = "No filename found in extracted info."
-            raise RuntimeError(msg)
-        logger.debug("Extracted filename: %s", filename)
-        _video_filenames[url] = filename
-
-    # FFMPEG command to convert and write to file
-    cmd: list[str] = [
-        "ffmpeg",
-        "-y",
-        "-i",
-        audio_url,
-        "-f",
-        "s16le",
-        "-acodec",
-        "pcm_s16le",
-        "-ac",
-        str(channels),
-        "-ar",
-        str(sample_rate),
-        str(cache_path),
-    ]
-
-    t0 = asyncio.get_event_loop().time()
-    proc = await asyncio.create_subprocess_exec(
-        *cmd,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-
-    _out, err = await proc.communicate()
-    if proc.returncode != 0:
-        msg = f"ffmpeg failed: {err.decode(errors='ignore')}"
-        raise RuntimeError(msg)
-    t1 = asyncio.get_event_loop().time()
-
-    _url_cache[url] = cache_path
-    logger.info(
-        "Cached audio for %s at %s. Took %.1fs",
-        url,
-        cache_path,
-        t1 - t0,
-    )
-    return cache_path
+        logger.info(
+            "Cached audio for %s at %s. Took %.1fs",
+            url,
+            cache_path,
+            t1 - t0,
+        )
+        return cache_path
 
 
-def get_audio_pcm(url: str) -> bytearray | None:
-    """Retrieve PCM audio data for a previously fetched URL.
-
-    Args:
-        url: YouTube video URL.
-
-    Returns:
-        Bytearray of PCM data, or None if not cached.
-
-    """
-    path = _url_cache.get(url) or _get_cache_path(
-        url, DEFAULT_SAMPLE_RATE, DEFAULT_CHANNELS
-    )
+def get_audio_pcm(
+    url: str, sample_rate: int = DEFAULT_SAMPLE_RATE, channels: int = DEFAULT_CHANNELS
+) -> bytearray | None:
+    """Retrieve PCM audio data for a previously fetched URL."""
+    path = _get_cache_path(url, sample_rate, channels)
     if not path.exists():
         logger.error("No cached audio for URL: %s", url)
         return None
@@ -183,22 +207,13 @@ def get_audio_pcm(url: str) -> bytearray | None:
     return bytearray(data)
 
 
-def remove_audio_pcm(url: str) -> bool:
-    """Remove cached PCM audio for a URL.
-
-    Args:
-        url: YouTube video URL.
-
-    Returns:
-        True if removed, False if not found.
-
-    """
-    path = _url_cache.get(url) or _get_cache_path(
-        url, DEFAULT_SAMPLE_RATE, DEFAULT_CHANNELS
-    )
+def remove_audio_pcm(
+    url: str, sample_rate: int = DEFAULT_SAMPLE_RATE, channels: int = DEFAULT_CHANNELS
+) -> bool:
+    """Remove cached PCM audio for a URL."""
+    path = _get_cache_path(url, sample_rate, channels)
     if path.exists():
         path.unlink()
-        _url_cache.pop(url, None)
         logger.info("Removed cached audio for %s", url)
         return True
     logger.warning("Attempted to remove non-existent cache for %s", url)
@@ -206,17 +221,8 @@ def remove_audio_pcm(url: str) -> bool:
 
 
 def get_youtube_track_name(url: str) -> str | None:
-    """Get the track name from a YouTube URL.
-
-    Args:
-        url: YouTube video URL.
-
-    Returns:
-        The track name if available, otherwise None.
-
-    """
+    """Get the track name from a YouTube URL."""
     if url in _video_filenames:
-        # If we already have the video name, return it
         return _video_filenames[url]
 
     try:
@@ -226,9 +232,11 @@ def get_youtube_track_name(url: str) -> str | None:
             if info is None:
                 return None
 
-            title = cast("str", ydl.prepare_filename(info, outtmpl="%(title)s"))  # type: ignore[no-untyped-call]
+            title = cast(
+                "str",
+                ydl.prepare_filename(info, outtmpl="%(title)s"),  # type: ignore[untyped-call]
+            )
             _video_filenames[url] = title or url
-
             return title
 
     except DownloadError:

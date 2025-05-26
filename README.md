@@ -4,15 +4,14 @@
 
 I got the soundbites from [here](https://drive.google.com/drive/folders/1dr2XcAQAuCPJqZQkCRKa4Aq8IDOH8ZIz)
 
-[Add to discord link](https://discord.com/oauth2/authorize?client_id=1376213084279930940)
-
+[Discord applications page](https://discord.com/developers/applications)
 
 # Immediate TODO List
 
 These are smaller jobs, that shouldn't take too long to knock down individually.
 
-- [ ] The bot shouldn't rely on a cache mapping of urls to file paths. Instead, just search the file path since they're deterministic.
-- [ ] When downloading youtube audio, download to `/tmp` and only move the completed file in to the audio cache when it's ready. Also, don't start a new download job for a file which is in progress. When the bot exits, cleanup should purge that directory!
+- [ ] IMPLEMENTED - MANUALLY TEST: The bot shouldn't rely on a cache mapping of urls to file paths. Instead, just search the file path since they're deterministic.
+- [ ] IMPLEMENTED - MANUALLY TEST: When downloading youtube audio, download to `/tmp` and only move the completed file in to the audio cache when it's ready. Also, don't start a new download job for a file which is in progress. When the bot exits, cleanup should purge that directory!
 - [ ] Add a cronjob to remove cached audio files that are over a week old
 - [ ] Report playback duration in the queue list command, and total queue duration as well. Add a method to the audio mixer class to do that.
 - [ ] If the play command doesnt get a valid youtube url, reject it and inform the user.
