@@ -10,6 +10,7 @@ I got the soundbites from [here](https://drive.google.com/drive/folders/1dr2XcAQ
  - [x] Add clearqueue command for youtube
  - [x] Parse youtube URLs into video titles
  - [ ] Send a message when a new track starts to play
+ - [ ] Test coverage is abysmal. Expand to cover all the stuff I've done since I last did a push on tests.
  - [ ] Add a crontab to remove cached audio files that are over a week old
  - [ ] Youtube playlist support
  - [ ] figure out voice listening [library](https://github.com/imayhaveborkedit/discord-ext-voice-recv)
