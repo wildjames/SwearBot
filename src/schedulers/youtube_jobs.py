@@ -62,6 +62,11 @@ async def _play_next(vc: discord_utils.DISCORD_VOICE_CLIENT) -> None:
         # Remove the URL from the queue after playback
         youtube_queue[vc.guild.id].pop(0)
 
+        # If the queue is now empty, remove the guild entry
+        if not youtube_queue[vc.guild.id]:
+            youtube_queue.pop(vc.guild.id, None)
+            logger.info("Queue empty for guild_id=%s, removed queue", vc.guild.id)
+
         # Schedule the next track when this one finishes
         logger.info("Finished playing %s for guild_id=%s", url, vc.guild.id)
         try:
