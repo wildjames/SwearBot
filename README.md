@@ -12,6 +12,7 @@ These are smaller jobs, that shouldn't take too long to knock down individually.
 
 - [ ] IMPLEMENTED - MANUALLY TEST: The bot shouldn't rely on a cache mapping of urls to file paths. Instead, just search the file path since they're deterministic.
 - [ ] IMPLEMENTED - MANUALLY TEST: When downloading youtube audio, download to `/tmp` and only move the completed file in to the audio cache when it's ready. Also, don't start a new download job for a file which is in progress. When the bot exits, cleanup should purge that directory!
+- [ ] Only build and push the docker image if the tests pass
 - [ ] Add a cronjob to remove cached audio files that are over a week old
 - [ ] Report playback duration in the queue list command, and total queue duration as well. Add a method to the audio mixer class to do that.
 - [ ] If the play command doesnt get a valid youtube url, reject it and inform the user.

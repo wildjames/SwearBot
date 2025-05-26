@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import importlib
 import pytest
+import sys
 from yt_dlp.utils import DownloadError
 
 
@@ -220,6 +221,7 @@ def test_get_youtube_track_name_error(tmp_dirs, monkeypatch):
 
 # -- Real integration test --
 @pytest.mark.asyncio
+@pytest.mark.integration
 async def test_integration_fetch_and_cache(tmp_dirs):
     cache_dir, tmp_dir = tmp_dirs
     mod = import_module(cache_dir, tmp_dir)

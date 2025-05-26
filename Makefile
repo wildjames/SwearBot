@@ -41,4 +41,7 @@ docker-run:
 docker-brun: docker-build docker-run
 
 test:
-	poetry run pytest
+	poetry run pytest -m "not integration"
+
+test-integration:
+	poetry run pytest -m integration
