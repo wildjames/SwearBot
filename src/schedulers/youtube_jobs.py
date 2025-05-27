@@ -1,6 +1,7 @@
 import logging
 
 from src import discord_utils
+from src.audio_handlers.youtube_audio import get_audio_download_progress
 
 # TODO: This should maintain a "playing" state so we can pause and resume playback
 
@@ -131,3 +132,11 @@ async def stop(vc: discord_utils.DISCORD_VOICE_CLIENT) -> None:
         logger.exception("Error stopping playback for guild_id=%s", vc.guild.id)
     # Clear queue
     await clear_queue(vc)
+
+
+def get_download_status(
+    vc: discord_utils.DISCORD_VOICE_CLIENT,
+) -> list[tuple[str, tuple[int, int]]]:
+    """Get the download status of any urls in the queue that are downloading."""
+    queue = youtube_queue.get(vc.guild.id, [])
+    return [(url, get_audio_download_progress(url)) for url in queue]

@@ -26,7 +26,17 @@ class MusicCommands(commands.Cog):
     async def play(self, interaction: discord.Interaction, url: str) -> None:
         """Enqueue a YouTube URL; starts playback if idle."""
         await interaction.response.defer(thinking=True, ephemeral=False)
+
+        url = url.strip()
+        if not youtube_audio.is_valid_youtube_url(url):
+            return await interaction.followup.send(
+                "Invalid YouTube URL. Please provide a valid link.", ephemeral=True
+            )
+
+        logger.info("Received play command for URL: %s", url)
         self.bot.loop.create_task(self._do_play(interaction, url))
+
+        return None
 
     async def _do_play(self, interaction: discord.Interaction, url: str) -> None:
         if interaction.guild is None:
@@ -219,6 +229,43 @@ class MusicCommands(commands.Cog):
         await interaction.response.send_message(
             "🗑️    Cleared the YouTube queue.", ephemeral=False
         )
+
+    @app_commands.command(name="download_status", description="Check download status")
+    async def download_status(self, interaction: discord.Interaction) -> None:
+        """Check the status of the current YouTube audio downloads."""
+        await interaction.response.defer(thinking=True, ephemeral=True)
+        if interaction.guild is None:
+            await interaction.followup.send(
+                "This command only works in a server.", ephemeral=True
+            )
+            return
+        member = interaction.guild.get_member(interaction.user.id)
+        if (
+            not member
+            or not member.voice
+            or not isinstance(member.voice.channel, discord.VoiceChannel)
+        ):
+            await interaction.followup.send(
+                "You need to be in a standard voice channel to check download status.",
+                ephemeral=True,
+            )
+            return
+
+        vc = await discord_utils.ensure_connected(
+            interaction.guild, member.voice.channel
+        )
+
+        status = youtube_jobs.get_download_status(vc)
+        if status == []:
+            await interaction.followup.send("No download in progress.", ephemeral=True)
+        else:
+            msg = "Download status:\n"
+            for url, (done, total) in status:
+                track_name = youtube_audio.get_youtube_track_name(url) or url
+                percent = (done / total) * 100
+                msg += f"{track_name}: {done}/{total} bytes ({percent:.2f}%)\n"
+
+            await interaction.followup.send(msg, ephemeral=True)
 
 
 async def setup(bot: commands.Bot) -> None:

@@ -30,6 +30,7 @@ clean:
 	rm -rf build/ dist/ *.egg-info
 	# Remove sounds directory if it exists
 	rm -rf sounds/
+	rm -rf audio_cache/
 	rm .coverage
 
 docker-build:
