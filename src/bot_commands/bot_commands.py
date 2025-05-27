@@ -61,6 +61,7 @@ class BotControlCommands(commands.Cog):
     @app_commands.command(name="ping", description="Check if the bot is alive")
     async def ping(self, interaction: discord.Interaction) -> None:
         """Check if the bot is alive."""
+        logger.info("Got a ping from: %s", interaction.user)
         await interaction.response.send_message("Pong!", ephemeral=True)
 
 
