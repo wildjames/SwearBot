@@ -66,6 +66,6 @@ jobs:
           context: .
           file: Dockerfile
           push: true
-          tags: ${{ secrets.DOCKER_HUB_USERNAME }}/BalaamBot:latest
+          tags: ${{ secrets.DOCKER_HUB_USERNAME }}/balaambot:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
