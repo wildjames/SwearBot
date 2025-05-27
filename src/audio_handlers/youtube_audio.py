@@ -239,8 +239,9 @@ async def _download_opus(url: str, opus_tmp: Path) -> None:
     # Ensure directory exists
     opus_tmp.parent.mkdir(parents=True, exist_ok=True)
     ydl_opts: dict[str, Any] = {
-        "format": "bestaudio",
+        "format": "bestaudio/best",
         "quiet": True,
+        "noprogress": True,
         "nocheckcertificate": True,
         "ignoreerrors": True,
         "noplaylist": True,
