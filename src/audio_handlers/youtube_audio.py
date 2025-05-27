@@ -26,9 +26,6 @@ audio_cache_dir.mkdir(parents=True, exist_ok=True)
 audio_tmp_dir = Path(AUDIO_DOWNLOAD_DIR).resolve()
 audio_tmp_dir.mkdir(parents=True, exist_ok=True)
 
-# Track the reported file sizes of downloading files
-download_sizes: dict[str, int] = {}
-
 
 # Cleanup temp directory on exit
 def _cleanup_tmp() -> None:
@@ -99,11 +96,12 @@ def _get_cache_path(url: str, sample_rate: int, channels: int) -> Path:
     return audio_cache_dir / filename
 
 
-def _get_download_path(url: str) -> Path:
-    """Compute the temporary download file path for a URL."""
+def _get_temp_paths(url: str) -> tuple[Path, Path]:
     vid = _get_video_id(url)
     base = vid or url.replace("/", "_")
-    return audio_tmp_dir / f"{base}.part"
+    opus_tmp = audio_tmp_dir / f"{base}.opus.part"
+    pcm_tmp = audio_tmp_dir / f"{base}.pcm.part"
+    return opus_tmp, pcm_tmp
 
 
 async def fetch_audio_pcm(
@@ -113,160 +111,94 @@ async def fetch_audio_pcm(
     username: str | None = None,
     password: str | None = None,
 ) -> Path:
-    """Download and cache PCM audio from a YouTube URL.
-
-    If the audio is already cached, it will return the cached file path.
-    If not cached, it will download the audio to a temp dir, convert it to
-    PCM format, and move it into the cache directory upon success.
-
-    Args:
-        url: YouTube video URL.
-        sample_rate: Output sample rate (Hz).
-        channels: Number of audio channels.
-        username: YouTube account username for authentication (NOT IMPLEMENTED).
-        password: YouTube account password for authentication (NOT IMPLEMENTED).
-
-    Returns:
-        Path to the cached PCM file.
-
-    Raises:
-        RuntimeError: On download or conversion failure.
-        NotImplementedError: If authentication is requested.
-
-    """
+    """Audio fetching. Cache check, download via yt-dlp, then convert to PCM."""
     cache_path = _get_cache_path(url, sample_rate, channels)
-    logger.info("Fetching audio for URL: %s", url)
-    logger.debug("Cache path: %s", cache_path)
-    # Return immediately if already cached
     if cache_path.exists():
-        logger.debug("Using cached audio at %s", cache_path)
         return cache_path
 
     if username or password:
         msg = "YouTube authentication is not implemented yet."
         raise NotImplementedError(msg)
 
-    # Prevent concurrent downloads of the same URL
     lock = _download_locks.setdefault(url, asyncio.Lock())
     async with lock:
-        # Double-check cache inside lock
         if cache_path.exists():
-            logger.debug("Using cached audio at %s", cache_path)
             return cache_path
 
-        # Prepare yt-dlp options
-        ydl_opts: dict[str, Any] = {
-            "format": "bestaudio/best",
-            "quiet": True,
-            "nocheckcertificate": True,
-            "ignoreerrors": True,
-            "no_warnings": True,
-        }
+        opus_tmp, pcm_tmp = _get_temp_paths(url)
 
-        logger.info("Extracting audio info from %s", url)
-        with YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)  # type: ignore  # noqa: PGH003
-            if not info:
-                msg = f"Could not extract info from {url}"
-                raise RuntimeError(msg)
+        await _download_opus(url, opus_tmp)
+        await _convert_opus_to_pcm(opus_tmp, pcm_tmp, cache_path, sample_rate, channels)
 
-            info = cast("dict[str, Any]", info) if isinstance(info, dict) else {}
-            audio_url = cast("str", info.get("url"))
-
-            if not audio_url:
-                msg = f"No audio URL found in info for {url}"
-                raise RuntimeError(msg)
-
-            filename = cast(
-                "str",
-                ydl.prepare_filename(info, outtmpl="%(title)s"),  # type: ignore[no-untyped-call]
-            )
-            if not filename:
-                msg = "No filename found in extracted info."
-                raise RuntimeError(msg)
-            logger.debug("Extracted filename: %s", filename)
-            _video_filenames[url] = filename
-
-            video_size = cast("int", info.get("filesize", 0))
-            if video_size > 0:
-                download_sizes[url] = video_size
-                logger.info("Estimated download size for %s: %d bytes", url, video_size)
-
-        # Download & convert via ffmpeg into a temp file
-        logger.info("Downloading audio from %s", url)
-        temp_path = _get_download_path(url)
-        cmd: list[str] = [
-            "ffmpeg",
-            "-y",
-            "-i",
-            audio_url,
-            "-f",
-            "s16le",
-            "-acodec",
-            "pcm_s16le",
-            "-ac",
-            str(channels),
-            "-ar",
-            str(sample_rate),
-            str(temp_path),
-        ]
-
-        t0 = asyncio.get_event_loop().time()
-        proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-
-        out, err = await proc.communicate()
-        if proc.returncode != 0:
-            temp_path.unlink(missing_ok=True)
-            msg = f"ffmpeg failed: {err.decode(errors='ignore')}"
-            raise RuntimeError(msg)
-        logger.info("ffmpeg completed successfully for %s", url)
-        logger.debug("ffmpeg output: %s", out.decode())
-        # Move completed file into cache
-        temp_path.replace(cache_path)
-        t1 = asyncio.get_event_loop().time()
-
-        logger.info(
-            "Downloaded and cached audio for %s at %s. Took %.1fs",
-            url,
-            cache_path,
-            t1 - t0,
-        )
         return cache_path
 
 
-def get_audio_download_progress(
-    url: str,
-    sample_rate: int = DEFAULT_SAMPLE_RATE,
-    channels: int = DEFAULT_CHANNELS,
-) -> tuple[int, int]:
-    """Get the download progress for a YouTube URL.
+async def _download_opus(url: str, opus_tmp: Path) -> None:
+    """Use yt-dlp to download and extract audio as opus into opus_tmp."""
+    # Ensure directory exists
+    opus_tmp.parent.mkdir(parents=True, exist_ok=True)
+    ydl_opts: dict[str, Any] = {
+        "format": "bestaudio",
+        "quiet": True,
+        "nocheckcertificate": True,
+        "ignoreerrors": True,
+        "no_warnings": True,
+        "postprocessors": [
+            {
+                "key": "FFmpegExtractAudio",
+                "preferredcodec": "opus",
+            }
+        ],
+        "outtmpl": str(opus_tmp.with_suffix("")),  # drop .part suffix
+    }
+    loop = asyncio.get_event_loop()
+    # Blocking download in executor
+    await loop.run_in_executor(None, lambda: YoutubeDL(ydl_opts).download([url]))  # type: ignore  # noqa: PGH003
 
-    Returns:
-        A tuple of (downloaded bytes, total bytes).
-        If the URL is not being downloaded, returns (total bytes, total bytes).
+    final_opus = opus_tmp.with_suffix(".opus")
+    if not final_opus.exists():
+        msg = f"yt-dlp failed to produce {final_opus}"
+        raise RuntimeError(msg)
+    # Rename to .part path for consistency
+    final_opus.replace(opus_tmp)
 
-    """
-    cache_path = _get_cache_path(url, sample_rate, channels)
-    if cache_path.exists():
-        # The file is cached, return its size
-        logger.debug("Cache exists for %s, returning cached size", url)
-        return (download_sizes.get(url, 0), download_sizes.get(url, 0))
 
-    lock = _download_locks.get(url)
-    if not lock or not lock.locked():
-        # If no lock exists or it's not locked, we are not downloading
-        logger.debug("No download in progress for %s, returning cached size", url)
-        return (download_sizes.get(url, 0), download_sizes.get(url, 0))
+async def _convert_opus_to_pcm(
+    opus_tmp: Path,
+    pcm_tmp: Path,
+    cache_path: Path,
+    sample_rate: int,
+    channels: int,
+) -> None:
+    """Convert a downloaded opus file to PCM and move to cache."""
+    cmd = [
+        "ffmpeg",
+        "-y",
+        "-i",
+        str(opus_tmp),
+        "-f",
+        "s16le",
+        "-acodec",
+        "pcm_s16le",
+        "-ac",
+        str(channels),
+        "-ar",
+        str(sample_rate),
+        str(pcm_tmp),
+    ]
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    _out, err = await proc.communicate()
+    opus_tmp.unlink(missing_ok=True)
+    if proc.returncode != 0:
+        pcm_tmp.unlink(missing_ok=True)
+        msg = f"ffmpeg failed: {err.decode(errors='ignore')}"
+        raise RuntimeError(msg)
 
-    # If the lock is held, we are downloading, and need to get the current size on disk
-    total = download_sizes.get(url, 0)
-    download_path = _get_download_path(url)
-    downloaded = download_path.stat().st_size if download_path.exists() else 0
-    return (downloaded, total)
+    pcm_tmp.replace(cache_path)
 
 
 def get_audio_pcm(
