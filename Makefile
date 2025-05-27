@@ -13,7 +13,7 @@ build:
 	poetry build
 
 run:
-	poetry run swearbot
+	poetry run balaambot
 
 unpack:
 	unzip -u sounds.zip
@@ -34,10 +34,10 @@ clean:
 	rm .coverage
 
 docker-build:
-	docker build -t swearbot:latest .
+	docker build -t balaambot:latest .
 
 docker-run:
-	docker run --rm -it swearbot:latest
+	docker run --rm -it balaambot:latest
 
 docker-brun: docker-build docker-run
 

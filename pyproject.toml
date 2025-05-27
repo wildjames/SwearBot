@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "swearbot"
+name = "balaambot"
 version = "0.1.0"
 description = "A discord bot that punishes cussing"
 authors = ["James Wild <wild.james343@gmail.com>"]
@@ -7,7 +7,7 @@ license = "MIT"
 packages = [{include="src"}]
 
 [tool.poetry.scripts]
-swearbot = "src.main:start"
+balaambot = "src.main:start"
 
 [tool.poetry.dependencies]
 python = "^3.10"
