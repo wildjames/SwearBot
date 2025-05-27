@@ -230,6 +230,86 @@ async def test_get_youtube_track_name_error(tmp_dirs, monkeypatch):
     monkeypatch.setattr(mod, 'YoutubeDL', DYDLFail)
     assert await mod.get_youtube_track_metadata(url) is None
 
+@pytest.mark.parametrize("url,expected", [
+    # explicit list= parameter
+    ("https://www.youtube.com/playlist?list=PL67890", True),
+    ("https://www.youtube.com/watch?v=PL123456789&list=PL67890", True),
+    ("https://www.youtube.com/playlist?list=PLtyo3aqsNv_Oe686OmaAi1heDjjnxYRmw", True),
+    # uppercase, extra params
+    ("https://youtu.be/XYZ12345678?list=ABCDEF&foo=bar", True),
+    # no list param
+    ("https://www.youtube.com/watch?v=abcdefghiJK", False),
+    ("https://youtu.be/abcdefghiJK", False),
+    # malformed
+    ("not a url at all", False),
+])
+def test_check_is_playlist(tmp_dirs, url, expected):
+    cache_dir, tmp_dir = tmp_dirs
+    mod = import_module(cache_dir, tmp_dir)
+    assert mod.check_is_playlist(url) is expected
+
+
+# -- get_playlist_video_urls tests --
+
+@pytest.mark.asyncio
+async def test_get_playlist_video_urls_no_list(tmp_dirs):
+    cache_dir, tmp_dir = tmp_dirs
+    mod = import_module(cache_dir, tmp_dir)
+    # URL without 'list' should immediately return empty list
+    url = "https://www.youtube.com/watch?v=abcdefghiJK"
+    result = await mod.get_playlist_video_urls(url)
+    assert result == []
+
+@pytest.mark.asyncio
+async def test_get_playlist_video_urls_success(tmp_dirs, monkeypatch):
+    cache_dir, tmp_dir = tmp_dirs
+    mod = import_module(cache_dir, tmp_dir)
+    playlist_id = "PLtyo3aqsNv_Oe686OmaAi1heDjjnxYRmw"
+    playlist_url = f"https://www.youtube.com/playlist?list={playlist_id}"
+
+    # Stub out YoutubeDL to return a fake playlist
+    class FakeDL:
+        def __init__(self, opts): pass
+        def __enter__(self): return self
+        def __exit__(self, exc_type, exc, tb): pass
+        def extract_info(self, url, download=False):
+            # simulate flat-playlist entries
+            return {
+                "entries": [
+                    {"id": "VID11111111"},
+                    {"id": "VID22222222"},
+                ]
+            }
+
+    monkeypatch.setattr(mod, "YoutubeDL", FakeDL)
+
+    result = await mod.get_playlist_video_urls(playlist_url)
+    assert isinstance(result, list)
+    assert result == [
+        "https://www.youtube.com/watch?v=VID11111111",
+        "https://www.youtube.com/watch?v=VID22222222",
+    ]
+
+@pytest.mark.asyncio
+async def test_get_playlist_video_urls_error(tmp_dirs, monkeypatch):
+    cache_dir, tmp_dir = tmp_dirs
+    mod = import_module(cache_dir, tmp_dir)
+    playlist_url = "https://www.youtube.com/playlist?list=PLFAKEID123"
+
+    # Raise DownloadError inside extract_info
+    class FailDL:
+        def __init__(self, opts): pass
+        def __enter__(self): return self
+        def __exit__(self, exc_type, exc, tb): pass
+        def extract_info(self, url, download=False):
+            raise DownloadError("playlist fetch failed")
+
+    monkeypatch.setattr(mod, "YoutubeDL", FailDL)
+
+    result = await mod.get_playlist_video_urls(playlist_url)
+    # On yt-dlp error we return []]
+    assert result == []
+
 # -- Real integration test --
 @pytest.mark.asyncio
 @pytest.mark.integration

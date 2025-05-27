@@ -5,6 +5,7 @@ import os
 import re
 import shutil
 import time
+import urllib.parse
 from pathlib import Path
 from typing import Any, TypedDict, cast
 
@@ -66,6 +67,7 @@ _YT_ID_RE = re.compile(
       |youtu\.be/                       # optional short URL
     )
     (?P<id>[A-Za-z0-9_-]{11})           # the 11-char video ID
+    .*                                  # Any extra query parameters
     """,
     re.VERBOSE,
 )
@@ -79,10 +81,32 @@ _VALID_YT_URL_RE = re.compile(
             watch\?(?:.*&)?v=
             |embed/
             |shorts/
+            |playlist/
         )
       |youtu\.be/                       # optional short URL
     )
     [A-Za-z0-9_-]{11}                   # the 11-char video ID
+    .*                                  # Any extra query parameters
+    """,
+    re.VERBOSE,
+)
+_VALID_YT_PLAYLIST_URL = re.compile(
+    r"""
+    ^(?:https?://)?                    # optional scheme
+    (?:(?:www|music)\.)?               # optional www. or music.
+    (?:
+        youtube\.com/
+        (?:
+            playlist\?list=           #   /playlist?list=ID
+          | watch\?(?:.*&)?list=      #   /watch?...&list=ID
+          | embed/videoseries\?list=  #   /embed/videoseries?list=ID
+        )
+      | youtu\.be/[A-Za-z0-9_-]{11}\? #   youtu.be/VIDEO_ID?
+        (?:.*&)?list=                 #   ...&list=ID
+    )
+    (?P<playlist_id>[A-Za-z0-9_-]+)    # capture the playlist ID
+    (?:[&?].*)?                        # optional extra params
+    $
     """,
     re.VERBOSE,
 )
@@ -134,7 +158,7 @@ async def get_youtube_track_metadata(url: str) -> VideoMetadata | None:
 
     try:
         with YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)  # type: ignore  # noqa: PGH003
+            info = ydl.extract_info(url, download=False)  # type: ignore[no-typing]
     except DownloadError as e:
         logger.warning("yt-dlp failed to extract info for %s: %s", url, e)
         return None
@@ -146,8 +170,8 @@ async def get_youtube_track_metadata(url: str) -> VideoMetadata | None:
         return None
 
     # pull out title and duration (seconds)
-    title = cast("str", info.get("title")) or url  # type: ignore  # noqa: PGH003
-    duration_s = cast("int", info.get("duration")) or 0  # type: ignore  # noqa: PGH003
+    title = cast("str", info.get("title")) or url  # type: ignore[no-typing]
+    duration_s = cast("int", info.get("duration")) or 0  # type: ignore[no-typing]
 
     # format runtime as H:MM:SS or M:SS
     runtime = time.strftime("%H:%M:%S", time.gmtime(duration_s))
@@ -192,14 +216,14 @@ async def fetch_audio_pcm(
 
         opus_tmp, pcm_tmp = _get_temp_paths(url)
 
-        promises = [  # type: ignore  # noqa: PGH003
+        promises = [  # type: ignore[no-typing]
             _download_opus(url, opus_tmp),
             get_youtube_track_metadata(url),
         ]
 
         # Run download and metadata fetch concurrently
         try:
-            await asyncio.gather(*promises)  # type: ignore  # noqa: PGH003
+            await asyncio.gather(*promises)  # type: ignore[no-typing]
         except DownloadError as e:
             logger.exception("yt-dlp failed to download %s", url)
             msg = f"Failed to download audio for {url}"
@@ -219,6 +243,7 @@ async def _download_opus(url: str, opus_tmp: Path) -> None:
         "quiet": True,
         "nocheckcertificate": True,
         "ignoreerrors": True,
+        "noplaylist": True,
         "no_warnings": True,
         "postprocessors": [
             {
@@ -230,7 +255,7 @@ async def _download_opus(url: str, opus_tmp: Path) -> None:
     }
     loop = asyncio.get_event_loop()
     # Blocking download in executor
-    await loop.run_in_executor(None, lambda: YoutubeDL(ydl_opts).download([url]))  # type: ignore  # noqa: PGH003
+    await loop.run_in_executor(None, lambda: YoutubeDL(ydl_opts).download([url]))  # type: ignore[no-typing]
 
     final_opus = opus_tmp.with_suffix(".opus")
     if not final_opus.exists():
@@ -303,6 +328,69 @@ def remove_audio_pcm(
     return False
 
 
+def is_valid_youtube_playlist(url: str) -> bool:
+    """Check if a URL is a valid YouTube playlist URL."""
+    return _VALID_YT_PLAYLIST_URL.match(url) is not None
+
+
+def check_is_playlist(url: str) -> bool:
+    """Check if the given url is a playlist by looking for the 'link' parameter.
+
+    Returns True if a non-empty 'list' query parameter is present.
+    """
+    if not is_valid_youtube_playlist(url):
+        return False
+
+    parsed = urllib.parse.urlparse(url)
+    params = urllib.parse.parse_qs(parsed.query)
+
+    # 'list' will be a key if there's a playlist ID in the URL
+    return bool(params.get("list", False))
+
+
+async def get_playlist_video_urls(playlist_url: str) -> list[str]:
+    """Given a YouTube playlist URL, return a list of all video URLs in that playlist.
+
+    If yt-dlp fails or the URL isn't a playlist, returns an empty list.
+    """
+    if not check_is_playlist(playlist_url):
+        return []
+
+    ydl_opts: dict[str, Any] = {
+        "quiet": True,
+        "skip_download": True,
+        "extract_flat": "in_playlist",
+    }
+
+    try:
+        with YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(playlist_url, download=False)  # type: ignore[no-typing]
+    except DownloadError as e:
+        logger.warning(
+            "yt-dlp failed to extract playlist info for %s: %s", playlist_url, e
+        )
+        return []
+    except Exception:
+        logger.exception("Unexpected error fetching playlist info for %s", playlist_url)
+        return []
+
+    if info is None:
+        msg = "Retrieved info from youtube was None"
+        raise TypeError(msg)
+
+    entries = cast("list[dict[str, Any]]", info.get("entries")) or []  # type: ignore[no-typing]
+
+    video_urls: list[str] = []
+    for entry in entries:
+        vid_id = entry.get("id")
+        if not vid_id:
+            continue
+        # build a standard watch URL
+        video_urls.append(f"https://www.youtube.com/watch?v={vid_id}")
+
+    return video_urls
+
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     test_url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
@@ -341,5 +429,12 @@ if __name__ == "__main__":
         # Remove cached file
         removed = remove_audio_pcm(test_url)
         logger.info("Cache removed: %s", removed)
+
+        playlist_url = "https://www.youtube.com/watch?v=Z0Uh3OJCx3o&list=PLJDafirWnxGR5H0rSeJKgxC6rIj78JKce"
+        logger.info("Fetching a playlist of URLs: %s", playlist_url)
+        urls = await get_playlist_video_urls(playlist_url)
+        logger.info("URLs:")
+        for url in urls:
+            logger.info(" - %s", url)
 
     asyncio.run(main())
