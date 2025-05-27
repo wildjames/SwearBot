@@ -70,5 +70,6 @@ jobs:
           context: .
           file: Dockerfile
           tags: ${{ secrets.DOCKER_HUB_USERNAME }}/balaambot:latest
+          push: true
           cache-from: type=gha
           cache-to: type=gha,mode=max
