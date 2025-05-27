@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from typing import TYPE_CHECKING
 
 import discord
 from discord import app_commands
@@ -8,6 +9,9 @@ from discord.ext import commands
 from src import discord_utils
 from src.audio_handlers import youtube_audio
 from src.schedulers import youtube_jobs
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +32,14 @@ class MusicCommands(commands.Cog):
         await interaction.response.defer(thinking=True, ephemeral=False)
 
         url = url.strip()
+
+        # Handle playlist URLs
+        if youtube_audio.is_valid_youtube_playlist(url):
+            logger.info("Received play command for playlist URL: %s", url)
+            self.bot.loop.create_task(self._do_play_playlist(interaction, url))
+            return None
+
+        # Handle youtube videos
         if not youtube_audio.is_valid_youtube_url(url):
             return await interaction.followup.send(
                 "Invalid YouTube URL. Please provide a valid link.", ephemeral=True
@@ -36,6 +48,59 @@ class MusicCommands(commands.Cog):
         logger.info("Received play command for URL: %s", url)
         self.bot.loop.create_task(self._do_play(interaction, url))
 
+        return None
+
+    async def _do_play_playlist(
+        self, interaction: discord.Interaction, playlist_url: str
+    ) -> None:
+        """Handle enqueuing all videos from a YouTube playlist."""
+        if interaction.guild is None:
+            return await interaction.followup.send(
+                "This command can only be used in a server.", ephemeral=True
+            )
+
+        member = interaction.guild.get_member(interaction.user.id)
+        if (
+            not member
+            or not member.voice
+            or not isinstance(member.voice.channel, discord.VoiceChannel)
+        ):
+            return await interaction.followup.send(
+                "Join a voice channel first.", ephemeral=True
+            )
+
+        vc = await discord_utils.ensure_connected(
+            interaction.guild, member.voice.channel
+        )
+        mixer = await discord_utils.get_mixer_from_voice_client(vc)
+
+        # Fetch playlist video URLs
+        track_urls = await youtube_audio.get_playlist_video_urls(playlist_url)
+        if not track_urls:
+            return await interaction.followup.send(
+                "Failed to fetch playlist or playlist is empty.", ephemeral=True
+            )
+
+        # Enqueue all tracks and start background fetches
+        fetch_tasks: list[asyncio.Task[Path]] = []
+        for track_url in track_urls:
+            fetch_task = asyncio.create_task(
+                youtube_audio.fetch_audio_pcm(
+                    track_url,
+                    sample_rate=mixer.SAMPLE_RATE,
+                    channels=mixer.CHANNELS,
+                )
+            )
+            fetch_tasks.append(fetch_task)
+            await youtube_jobs.add_to_queue(vc, track_url)
+
+        # Confirmation message
+        await interaction.followup.send(
+            f"🎵    Queued {len(track_urls)} tracks from playlist.", ephemeral=False
+        )
+
+        # And wait for all the videos to download
+        await fetch_tasks[0]
         return None
 
     async def _do_play(self, interaction: discord.Interaction, url: str) -> None:

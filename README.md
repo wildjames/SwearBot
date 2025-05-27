@@ -4,7 +4,28 @@
 
 I got the soundbites from [here](https://drive.google.com/drive/folders/1dr2XcAQAuCPJqZQkCRKa4Aq8IDOH8ZIz)
 
-[Discord applications page](https://discord.com/developers/applications)
+## Setting up a bot
+
+Follow the instructions [here](https://discordpy.readthedocs.io/en/stable/discord.html). If it helps, this is the [Discord applications page](https://discord.com/developers/applications) which will house your bot settings in the future.
+
+## Required bot permissions
+
+Set the bot to install only to Guilds - not to users. There are no features that would work for individuals I think.
+
+Scopes:
+ - `applications.commands`
+ - `bot`
+
+Permissions:
+ - `Connect`
+ - `Send Messages`
+ - `Speak`
+ - `Use Voice Activity`
+ - `View Channels`
+
+Priviledged Intents:
+ - `Message Content Intent`
+
 
 # Immediate TODO List
 
