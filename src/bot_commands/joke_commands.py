@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 
 class JokeCommands(commands.Cog):
-    """Slash commands for YouTube queue and playback."""
+    """Slash commands for telling bad jokes."""
 
     def __init__(self, bot: commands.Bot) -> None:
         """Initialize the JokeCommands cog."""
