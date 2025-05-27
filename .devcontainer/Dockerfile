@@ -53,4 +53,7 @@ ENV PYENV_ROOT="/opt/.pyenv"
 ENV PATH="$PYENV_ROOT/shims:$PYENV_ROOT/bin:$PATH"
 ENV PYTHONUNBUFFERED=True
 
-RUN chown -R vscode $PYENV_ROOT
+RUN poetry_env=$(poetry env info --path) && \
+    printf "if [ -f \"%s/bin/activate\" ]; then\n  source \"%s/bin/activate\"\nfi" "$poetry_env" "$poetry_env" \
+    >> /home/vscode/.zshrc \
+    && chown -R vscode $PYENV_ROOT

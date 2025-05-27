@@ -47,15 +47,18 @@
                 },
                 "files.insertFinalNewline": true,
                 "files.trimTrailingWhitespace": true,
-                "terminal.integrated.defaultProfile.linux": "zsh",
                 "terminal.integrated.profiles.linux": {
                     "zsh": {
-                        "path": "/bin/zsh"
+                        "path": "/bin/zsh",
+                        "args": [
+                            "-l"
+                        ]
                     }
-                }
+                },
+                "terminal.integrated.defaultProfile.linux": "zsh"
             }
         }
     },
-    "postStartCommand": "pre-commit install; make install",
+    "postStartCommand": "pre-commit install && make install-dev",
     "remoteUser": "vscode"
 }
