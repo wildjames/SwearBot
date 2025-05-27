@@ -42,7 +42,7 @@ These are smaller jobs, that shouldn't take too long to knock down individually.
 
 These are things that will likely take over an hour
 
-- [ ] Youtube playlist support
+- [x] Youtube playlist support
 - [ ] Youtube age restricts some content, so I need to implement auth
 - [ ] Allow users to search youtube for videos
 - [ ] Add a way to scrub the currently playing track?
