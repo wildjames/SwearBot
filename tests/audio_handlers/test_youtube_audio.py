@@ -185,7 +185,8 @@ async def test_fetch_audio_pcm_auth_error(tmp_dirs):
 
 # -- Track name tests --
 
-def test_get_youtube_track_name_success(tmp_dirs, monkeypatch):
+@pytest.mark.asyncio
+async def test_get_youtube_track_name_success(tmp_dirs, monkeypatch):
     cache_dir, tmp_dir = tmp_dirs
     mod = import_module(cache_dir, tmp_dir)
     url = 'https://youtu.be/TRACKID12345'
@@ -198,15 +199,16 @@ def test_get_youtube_track_name_success(tmp_dirs, monkeypatch):
         def prepare_filename(self, info, outtmpl): return info['title']
 
     monkeypatch.setattr(mod, 'YoutubeDL', DYDL)
-    name = mod.get_youtube_track_name(url)
-    assert name == 'My Track'
+    meta = await mod.get_youtube_track_metadata(url)
+    assert meta["title"] == 'My Track'
 
     # cached
-    name2 = mod.get_youtube_track_name(url)
-    assert name2 == 'My Track'
+    meta2 = await mod.get_youtube_track_metadata(url)
+    assert meta2["title"] == 'My Track'
 
 
-def test_get_youtube_track_name_error(tmp_dirs, monkeypatch):
+@pytest.mark.asyncio
+async def test_get_youtube_track_name_error(tmp_dirs, monkeypatch):
     cache_dir, tmp_dir = tmp_dirs
     mod = import_module(cache_dir, tmp_dir)
     url = 'https://youtu.be/BADID'
@@ -218,7 +220,7 @@ def test_get_youtube_track_name_error(tmp_dirs, monkeypatch):
         def extract_info(self, url, download=False): raise DownloadError("fail")
 
     monkeypatch.setattr(mod, 'YoutubeDL', DYDLFail)
-    assert mod.get_youtube_track_name(url) is None
+    assert await mod.get_youtube_track_metadata(url) is None
 
 # -- Real integration test --
 @pytest.mark.asyncio

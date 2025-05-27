@@ -74,13 +74,23 @@ class MusicCommands(commands.Cog):
         # Add to queue. Playback (in mixer) will await cache when it's time
         await youtube_jobs.add_to_queue(vc, url)
 
-        track_name = youtube_audio.get_youtube_track_name(url) or url
+        track_meta = await youtube_audio.get_youtube_track_metadata(url)
+        if track_meta is None:
+            await interaction.followup.send(
+                f"Failed to fetch track metadata. Please check the URL. [{url}]",
+                ephemeral=True,
+            )
+            return None
+
         queue = await youtube_jobs.list_queue(vc)
         pos = len(queue)
+
+        runtime = track_meta["runtime_str"]
+
         msg = (
-            f"🎵    Queued **{track_name}** at position {pos}."
+            f"🎵    Queued **{track_meta['title']} ({runtime})** at position {pos}."
             if pos > 1
-            else f"▶️    Now playing **{track_name}**"
+            else f"▶️    Now playing **{track_meta['title']}**"
         )
         await interaction.followup.send(msg)
 
@@ -114,16 +124,28 @@ class MusicCommands(commands.Cog):
             member.voice.channel,
         )
         upcoming = await youtube_jobs.list_queue(vc)
+
         if not upcoming:
             msg = "The queue is empty."
         else:
-            lines = [
-                f"{i + 1}. {youtube_audio.get_youtube_track_name(url)}"
-                for i, url in enumerate(upcoming)
-            ]
-            lines[0] = (
-                f"**Now playing:** {youtube_audio.get_youtube_track_name(upcoming[0])}"
-            )
+            lines: list[str] = []
+            for i, url in enumerate(upcoming):
+                track_meta = await youtube_audio.get_youtube_track_metadata(url)
+                if track_meta is None:
+                    lines.append(f"{i + 1}. [Invalid track URL]({url})")
+                    continue
+                lines.append(
+                    f"{i + 1}. {track_meta['title']} ({track_meta['runtime_str']})"
+                )
+
+            track_meta = await youtube_audio.get_youtube_track_metadata(upcoming[0])
+            if track_meta is None:
+                lines[0] = f"**Now playing:** [Invalid track URL]({upcoming[0]})"
+            else:
+                lines[0] = (
+                    "**Now playing:** "
+                    f"{track_meta['title']} ({track_meta['runtime_str']})"
+                )
             msg = "**Upcoming tracks:**\n" + "\n".join(lines)
         await interaction.response.send_message(msg, ephemeral=True)
 
@@ -160,9 +182,15 @@ class MusicCommands(commands.Cog):
             )
             return
 
-        track_name = youtube_audio.get_youtube_track_name(track_url)
+        track_meta = await youtube_audio.get_youtube_track_metadata(track_url)
+        if track_meta is None:
+            await interaction.response.send_message(
+                f"Failed to fetch track metadata. Please check the URL. [{track_url}]",
+                ephemeral=True,
+            )
+            return
         await interaction.response.send_message(
-            f"⏭️    Skipped to next track: {track_name}",
+            f"⏭️    Skipped to next track: {track_meta['title']}",
             ephemeral=False,
         )
 

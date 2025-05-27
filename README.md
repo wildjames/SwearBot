@@ -10,12 +10,12 @@ I got the soundbites from [here](https://drive.google.com/drive/folders/1dr2XcAQ
 
 These are smaller jobs, that shouldn't take too long to knock down individually.
 
-- [ ] IMPLEMENTED - MANUALLY TEST: The bot shouldn't rely on a cache mapping of urls to file paths. Instead, just search the file path since they're deterministic.
-- [ ] IMPLEMENTED - MANUALLY TEST: When downloading youtube audio, download to `/tmp` and only move the completed file in to the audio cache when it's ready. Also, don't start a new download job for a file which is in progress. When the bot exits, cleanup should purge that directory!
+- [x] The bot shouldn't rely on a cache mapping of urls to file paths. Instead, just search the file path since they're deterministic.
+- [x] When downloading youtube audio, download to `/tmp` and only move the completed file in to the audio cache when it's ready. Also, don't start a new download job for a file which is in progress. When the bot exits, cleanup should purge that directory!
 - [ ] Only build and push the docker image if the tests pass
 - [ ] Add a cronjob to remove cached audio files that are over a week old
-- [ ] Report playback duration in the queue list command, and total queue duration as well. Add a method to the audio mixer class to do that.
-- [ ] If the play command doesnt get a valid youtube url, reject it and inform the user.
+- [x] Report playback duration in the queue list command. Add a method to the audio mixer class to do that.
+- [x] If the play command doesnt get a valid youtube url, reject it and inform the user.
 
 # Mid-term TODO list
 
@@ -24,11 +24,11 @@ These are things that will likely take over an hour
 - [ ] Youtube playlist support
 - [ ] Youtube age restricts some content, so I need to implement auth
 - [ ] Allow users to search youtube for videos
-- [ ] Add a way to scrub the currently playing track
-- [ ] Multiple people sending commands at once seems to not work
+- [ ] Add a way to scrub the currently playing track?
+- [ ] Multiple people sending commands at once seems to not work - test
 - [ ] Commands need to have guard clauses abstracted out into some discord utility functions
 - [ ] Send a message when a new track starts to play
-- [ ] Test coverage is abysmal. Expand to cover all the stuff I've done since I last did a push on tests.
+- [x] Test coverage is abysmal. Expand to cover all the stuff I've done since I last did a push on tests.
 
 
 ## Long term TODO

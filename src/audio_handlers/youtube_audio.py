@@ -4,11 +4,11 @@ import logging
 import os
 import re
 import shutil
+import time
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, TypedDict, cast
 
-from yt_dlp import YoutubeDL  # type: ignore[import]
-from yt_dlp.utils import DownloadError  # type: ignore[import]
+from yt_dlp import DownloadError, YoutubeDL  # type: ignore[import]
 
 logger = logging.getLogger(__name__)
 
@@ -34,8 +34,19 @@ def _cleanup_tmp() -> None:
 
 atexit.register(_cleanup_tmp)
 
-# Dictionary to store video filenames by URL
-_video_filenames: dict[str, str] = {}
+
+# Dictionary to store video metadata by URL
+class VideoMetadata(TypedDict):
+    """Metadata for a YouTube video."""
+
+    url: str
+    title: str
+    runtime: int  # in seconds
+    runtime_str: str  # formatted as H:MM:SS or M:SS
+
+
+# Keyed by URL, values are VideoMetadata
+_video_metadata: dict[str, VideoMetadata] = {}
 
 # Locks to prevent multiple simultaneous downloads of the same URL
 _download_locks: dict[str, asyncio.Lock] = {}
@@ -104,6 +115,60 @@ def _get_temp_paths(url: str) -> tuple[Path, Path]:
     return opus_tmp, pcm_tmp
 
 
+async def get_youtube_track_metadata(url: str) -> VideoMetadata | None:
+    """Get the track metadata from a YouTube URL."""
+    # quick URL validation
+    if not is_valid_youtube_url(url):
+        logger.debug("Invalid YouTube URL: %s", url)
+        return None
+
+    # return cached metadata if available
+    if url in _video_metadata:
+        return _video_metadata[url]
+
+    ydl_opts = {
+        "quiet": True,
+        "skip_download": True,
+        "extract_flat": True,  # faster metadata-only extraction
+    }
+
+    try:
+        with YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)  # type: ignore  # noqa: PGH003
+    except DownloadError as e:
+        logger.warning("yt-dlp failed to extract info for %s: %s", url, e)
+        return None
+    except Exception:
+        logger.exception("Unexpected error fetching metadata for %s", url)
+        return None
+
+    if not info:
+        return None
+
+    # pull out title and duration (seconds)
+    title = cast("str", info.get("title")) or url  # type: ignore  # noqa: PGH003
+    duration_s = cast("int", info.get("duration")) or 0  # type: ignore  # noqa: PGH003
+
+    # format runtime as H:MM:SS or M:SS
+    runtime = time.strftime("%H:%M:%S", time.gmtime(duration_s))
+    # strip leading "00:" for videos under an hour
+    runtime = runtime.removeprefix("00:")
+
+    runtime_str = (
+        f"{duration_s // 3600:02}:{(duration_s % 3600) // 60:02}:{duration_s % 60:02}"
+    )
+
+    # cache and return
+    _video_metadata[url] = VideoMetadata(
+        url=url,
+        title=title,
+        runtime=duration_s,
+        runtime_str=runtime_str,
+    )
+    logger.debug("Cached metadata for %s: %s", url, _video_metadata[url])
+    return _video_metadata[url]
+
+
 async def fetch_audio_pcm(
     url: str,
     sample_rate: int = DEFAULT_SAMPLE_RATE,
@@ -127,7 +192,19 @@ async def fetch_audio_pcm(
 
         opus_tmp, pcm_tmp = _get_temp_paths(url)
 
-        await _download_opus(url, opus_tmp)
+        promises = [  # type: ignore  # noqa: PGH003
+            _download_opus(url, opus_tmp),
+            get_youtube_track_metadata(url),
+        ]
+
+        # Run download and metadata fetch concurrently
+        try:
+            await asyncio.gather(*promises)  # type: ignore  # noqa: PGH003
+        except DownloadError as e:
+            logger.exception("yt-dlp failed to download %s", url)
+            msg = f"Failed to download audio for {url}"
+            raise RuntimeError(msg) from e
+
         await _convert_opus_to_pcm(opus_tmp, pcm_tmp, cache_path, sample_rate, channels)
 
         return cache_path
@@ -226,31 +303,6 @@ def remove_audio_pcm(
     return False
 
 
-def get_youtube_track_name(url: str) -> str | None:
-    """Get the track name from a YouTube URL."""
-    if url in _video_filenames:
-        return _video_filenames[url]
-
-    try:
-        ydl_opts = {"quiet": True, "skip_download": True}
-        with YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)  # type: ignore[untyped-call]
-            if info is None:
-                return None
-
-            title = cast(
-                "str",
-                ydl.prepare_filename(info, outtmpl="%(title)s"),  # type: ignore[untyped-call]
-            )
-            _video_filenames[url] = title or url
-            return title
-
-    except DownloadError:
-        return None
-    else:
-        return None
-
-
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     test_url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
@@ -267,10 +319,11 @@ if __name__ == "__main__":
 
         # Get track name
         t0 = asyncio.get_event_loop().time()
-        track_name = get_youtube_track_name(test_url)
+        track_metadata = await get_youtube_track_metadata(test_url)
         t1 = asyncio.get_event_loop().time()
-        if track_name:
-            logger.info("Track name: %s", track_name)
+        if track_metadata:
+            logger.info("Track name: %s", track_metadata["title"])
+            logger.info("Track runtime: %s seconds", track_metadata["runtime"])
             logger.info("Track name fetch took %.2f seconds", t1 - t0)
         else:
             logger.warning("Could not fetch track name for URL: %s", test_url)
