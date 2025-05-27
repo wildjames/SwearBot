@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import time
 from typing import TYPE_CHECKING
 
 import discord
@@ -99,7 +100,7 @@ class MusicCommands(commands.Cog):
             f"🎵    Queued {len(track_urls)} tracks from playlist.", ephemeral=False
         )
 
-        # And wait for all the videos to download
+        # And wait for the first video to download
         await fetch_tasks[0]
         return None
 
@@ -168,9 +169,11 @@ class MusicCommands(commands.Cog):
     @app_commands.command(name="list_queue", description="List upcoming YouTube tracks")
     async def list_queue(self, interaction: discord.Interaction) -> None:
         """Show the current YouTube queue for this server."""
+        await interaction.response.defer(ephemeral=True, thinking=True)
         if interaction.guild is None:
-            await interaction.response.send_message(
-                "This command only works in a server.", ephemeral=True
+            await interaction.followup.send(
+                "This command only works in a server.",
+                ephemeral=True,
             )
             return
         member = interaction.guild.get_member(interaction.user.id)
@@ -179,7 +182,7 @@ class MusicCommands(commands.Cog):
             or not member.voice
             or not isinstance(member.voice.channel, discord.VoiceChannel)
         ):
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "You need to be in a standard voice channel to view the queue.",
                 ephemeral=True,
             )
@@ -194,6 +197,8 @@ class MusicCommands(commands.Cog):
             msg = "The queue is empty."
         else:
             lines: list[str] = []
+            total_runtime = 0
+
             for i, url in enumerate(upcoming):
                 track_meta = await youtube_audio.get_youtube_track_metadata(url)
                 if track_meta is None:
@@ -202,6 +207,7 @@ class MusicCommands(commands.Cog):
                 lines.append(
                     f"{i + 1}. {track_meta['title']} ({track_meta['runtime_str']})"
                 )
+                total_runtime += track_meta["runtime"]
 
             track_meta = await youtube_audio.get_youtube_track_metadata(upcoming[0])
             if track_meta is None:
@@ -212,7 +218,14 @@ class MusicCommands(commands.Cog):
                     f"{track_meta['title']} ({track_meta['runtime_str']})"
                 )
             msg = "**Upcoming tracks:**\n" + "\n".join(lines)
-        await interaction.response.send_message(msg, ephemeral=True)
+
+            # format runtime as H:MM:SS or M:SS
+            total_runtime_str = time.strftime("%H:%M:%S", time.gmtime(total_runtime))
+            # strip leading "00:" for videos under an hour
+            total_runtime_str = total_runtime_str.removeprefix("00:")
+            msg += f"\n\n🔮    Total runtime: {total_runtime_str}"
+
+        await interaction.followup.send(msg, ephemeral=True)
 
     @app_commands.command(name="skip", description="Skip the current YouTube track")
     async def skip(self, interaction: discord.Interaction) -> None:
