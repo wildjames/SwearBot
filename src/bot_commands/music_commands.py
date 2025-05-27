@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import logging
 
 import discord
@@ -232,40 +233,73 @@ class MusicCommands(commands.Cog):
 
     @app_commands.command(name="download_status", description="Check download status")
     async def download_status(self, interaction: discord.Interaction) -> None:
-        """Check the status of the current YouTube audio downloads."""
+        """Check the status of YouTube audio downloads, updating every 3 seconds."""
+        # defer so we can send/edit an ephemeral followup
         await interaction.response.defer(thinking=True, ephemeral=True)
+
         if interaction.guild is None:
-            await interaction.followup.send(
+            return await interaction.followup.send(
                 "This command only works in a server.", ephemeral=True
             )
-            return
+
         member = interaction.guild.get_member(interaction.user.id)
         if (
             not member
             or not member.voice
             or not isinstance(member.voice.channel, discord.VoiceChannel)
         ):
-            await interaction.followup.send(
+            return await interaction.followup.send(
                 "You need to be in a standard voice channel to check download status.",
                 ephemeral=True,
             )
-            return
 
         vc = await discord_utils.ensure_connected(
             interaction.guild, member.voice.channel
         )
 
-        status = youtube_jobs.get_download_status(vc)
-        if status == []:
-            await interaction.followup.send("No download in progress.", ephemeral=True)
-        else:
-            msg = "Download status:\n"
-            for url, (done, total) in status:
-                track_name = youtube_audio.get_youtube_track_name(url) or url
-                percent = (done / total) * 100
-                msg += f"{track_name}: {done}/{total} bytes ({percent:.2f}%)\n"
+        # helper to format status into a message string
+        def format_status(status_list: list[tuple[str, tuple[int, int]]]) -> str:
+            """Format the download status into a readable string."""
+            megabyte = 1024 * 1024
+            lines: list[str] = []
+            for url, (done, total) in status_list:
+                name = youtube_audio.get_youtube_track_name(url) or url
+                percent = (done / total) * 100 if total else 0
 
-            await interaction.followup.send(msg, ephemeral=True)
+                lines.append(
+                    f"{name}: {done / megabyte}/{total / megabyte} MB ({percent:.2f}%)"
+                )
+            return "Download status:\n" + "\n".join(lines)
+
+        # initial check
+        status = youtube_jobs.get_download_status(vc)
+        if not status:
+            return await interaction.followup.send(
+                "No download in progress.", ephemeral=True
+            )
+
+        # send the first ephemeral update
+        status_msg = await interaction.followup.send(
+            format_status(status), ephemeral=True, wait=True
+        )
+
+        # loop until done or message gone
+        while True:
+            await asyncio.sleep(1)
+
+            status = youtube_jobs.get_download_status(vc)
+            if not status:
+                # all done — one final edit
+                with contextlib.suppress(discord.NotFound, discord.HTTPException):
+                    await status_msg.edit(content="✅ All downloads complete!")
+                break
+
+            # still downloading — update progress
+            try:
+                await status_msg.edit(content=format_status(status))
+            except (discord.NotFound, discord.HTTPException):
+                # message was deleted or can't be edited — stop looping
+                break
 
 
 async def setup(bot: commands.Bot) -> None:
