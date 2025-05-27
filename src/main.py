@@ -36,7 +36,7 @@ async def on_ready() -> None:
 async def load_extensions() -> None:
     """Load all the available bot extensions."""
     commands_path = pathlib.Path(__file__).parent / "bot_commands"
-    extension_files = commands_path.glob("*.py")
+    extension_files = sorted(commands_path.glob("*.py"), key=lambda f: f.name)
 
     for ext_file in extension_files:
         if ext_file.name != "__init__.py":
