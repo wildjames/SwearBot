@@ -42,6 +42,8 @@ jobs:
 
       - name: Upload coverage to Coveralls
         uses: coverallsapp/github-action@v2
+        with:
+          push: ${{ github.ref == 'refs/heads/main' }}
 
   docker:
     name: Docker Build & Push
@@ -65,6 +67,7 @@ jobs:
         with:
           context: .
           file: Dockerfile
+          push: ${{ github.ref == 'refs/heads/main' }}
           push: true
           tags: ${{ secrets.DOCKER_HUB_USERNAME }}/balaambot:latest
           cache-from: type=gha
