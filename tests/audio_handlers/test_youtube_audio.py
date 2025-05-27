@@ -133,8 +133,12 @@ async def test_fetch_audio_pcm_success(tmp_dirs, monkeypatch):
         cache_path.parent.mkdir(parents=True, exist_ok=True)
         cache_path.write_bytes(b"\x00" * 10)
 
+    async def fake_get_youtube_track_metadata(url):
+        return {"title": "fake title"}
+
     monkeypatch.setattr(mod, '_download_opus', fake_download_opus)
     monkeypatch.setattr(mod, '_convert_opus_to_pcm', fake_convert_opus)
+    monkeypatch.setattr(mod, "get_youtube_track_metadata", fake_get_youtube_track_metadata)
 
     # First fetch should invoke stubs and create cache
     result = await mod.fetch_audio_pcm(url)
@@ -170,6 +174,10 @@ async def test_fetch_audio_pcm_ffmpeg_fail(tmp_dirs, monkeypatch):
     async def fake_create(*args, **kwargs):
         return DummyProcessFail()
 
+    async def fake_get_youtube_track_metadata(url):
+        return {"title": "fake title"}
+
+    monkeypatch.setattr(mod, "get_youtube_track_metadata", fake_get_youtube_track_metadata)
     monkeypatch.setattr(asyncio, 'create_subprocess_exec', fake_create)
 
     with pytest.raises(RuntimeError) as excinfo:
