@@ -239,6 +239,7 @@ async def _download_opus(url: str, opus_tmp: Path) -> None:
     # Ensure directory exists
     opus_tmp.parent.mkdir(parents=True, exist_ok=True)
     ydl_opts: dict[str, Any] = {
+        "logger": logger,
         "format": "bestaudio/best",
         "quiet": True,
         "noprogress": True,
@@ -358,6 +359,7 @@ async def get_playlist_video_urls(playlist_url: str) -> list[str]:
         return []
 
     ydl_opts: dict[str, Any] = {
+        "logger": logger,
         "quiet": True,
         "skip_download": True,
         "extract_flat": "in_playlist",
@@ -390,3 +392,54 @@ async def get_playlist_video_urls(playlist_url: str) -> list[str]:
         video_urls.append(f"https://www.youtube.com/watch?v={vid_id}")
 
     return video_urls
+
+
+async def search_youtube(search: str, n: int = 5) -> list[tuple[str, str]]:
+    """Given a search string, return the top `n` results.
+
+    Returns a list of (url, title)
+    """
+
+    def is_not_video(info: dict[str, Any], *, _incomplete) -> bool:  # type: ignore  # noqa: ANN001, PGH003
+        """Returns false if the result is not a video."""
+        url = cast("str", info.get("url"))
+        logger.info("Filtering url %s", url)
+        return not is_valid_youtube_url(url)
+
+    ydl_opts: dict[str, Any] = {
+        "logger": logger,
+        "extract_flat": "in_playlist",
+        "forceid": True,
+        "forcetitle": True,
+        "noprogress": True,
+        "quiet": True,
+        "simulate": True,
+        "skip_download": True,
+        # TODO: The filtering is not working - the search can return channels
+        # (possibly playlists too?)
+        "match_filter": is_not_video,
+    }
+
+    search = f"ytsearch{n}:{search}"
+
+    try:
+        with YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(search, download=False)  # type: ignore[no-typing]
+    except DownloadError as e:
+        logger.warning("yt-dlp failed to extract search for %s: %s", search, e)
+        return []
+    except Exception:
+        logger.exception("Unexpected error fetching search for %s", search)
+        return []
+
+    if info is None:
+        msg = "Retrieved info from youtube was None"
+        raise TypeError(msg)
+
+    entries = cast("list[dict[str, Any]]", info.get("entries")) or []  # type: ignore[no-typing]
+
+    results = [
+        (cast("str", e.get("url")), cast("str", e.get("title"))) for e in entries
+    ]
+    logger.info('Search for "%s" return %d results', search, len(results))
+    return results
