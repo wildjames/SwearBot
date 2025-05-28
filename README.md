@@ -33,6 +33,7 @@ These are smaller jobs, that shouldn't take too long to knock down individually.
 
 - [ ] Add a cronjob to remove cached audio files that are over a week old
 - [ ] Update the dockerfiles to pull the sounds zip and unpack it only during the running phase, rather than packing it into the built image
+- [ ] Move the audio cache to a mounted volume mapping, so it's stored outside the docker container
 - [x] The bot shouldn't rely on a cache mapping of urls to file paths. Instead, just search the file path since they're deterministic.
 - [x] When downloading youtube audio, download to `/tmp` and only move the completed file in to the audio cache when it's ready. Also, don't start a new download job for a file which is in progress. When the bot exits, cleanup should purge that directory!
 - [x] Only build and push the docker image if the tests pass
