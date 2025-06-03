@@ -112,6 +112,17 @@ _VALID_YT_PLAYLIST_URL = re.compile(
 )
 
 
+def sec_to_string(val: float) -> str:
+    """Convert a number of seconds to a human-readable string, (HH:)MM:SS."""
+    sec_in_hour = 60 * 60
+    d = ""
+    if val >= sec_in_hour:
+        d += f"{int(val // sec_in_hour):02d}:"
+        val = val % sec_in_hour
+    d += f"{int(val // 60):02d}:{int(val % 60):02d}"
+    return d
+
+
 def is_valid_youtube_url(url: str) -> bool:
     """Check if a URL is a valid YouTube video URL."""
     return _VALID_YT_URL_RE.match(url) is not None
@@ -394,10 +405,10 @@ async def get_playlist_video_urls(playlist_url: str) -> list[str]:
     return video_urls
 
 
-async def search_youtube(search: str, n: int = 5) -> list[tuple[str, str]]:
+async def search_youtube(search: str, n: int = 5) -> list[tuple[str, str, float]]:
     """Given a search string, return the top `n` results.
 
-    Returns a list of (url, title)
+    Returns a list of (url, title, duration (s)
     """
     ydl_opts: dict[str, Any] = {
         "logger": logger,
@@ -434,7 +445,7 @@ async def search_youtube(search: str, n: int = 5) -> list[tuple[str, str]]:
 
     entries = cast("list[dict[str, Any]]", info.get("entries")) or []  # type: ignore[no-typing]
 
-    results: list[tuple[str, str]] = []
+    results: list[tuple[str, str, float]] = []
     for entry in entries:
         # Only keep actual videos (they always have a "duration" field)
         duration = entry.get("duration")
@@ -446,7 +457,7 @@ async def search_youtube(search: str, n: int = 5) -> list[tuple[str, str]]:
             continue
 
         url = f"https://www.youtube.com/watch?v={video_id}"
-        results.append((url, title))
+        results.append((url, title, duration))
         if len(results) == n:
             break
 

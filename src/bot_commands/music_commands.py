@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import time
 from typing import TYPE_CHECKING
 
 import discord
@@ -27,29 +26,51 @@ class MusicCommands(commands.Cog):
     @app_commands.command(
         name="play", description="Enqueue and play a YouTube video audio"
     )
-    @app_commands.describe(url="YouTube video URL")
-    async def play(self, interaction: discord.Interaction, url: str) -> None:
+    @app_commands.describe(query="YouTube video URL, playlist URL, or search term")
+    async def play(self, interaction: discord.Interaction, query: str) -> None:
         """Enqueue a YouTube URL; starts playback if idle."""
-        await interaction.response.defer(thinking=True, ephemeral=False)
+        await interaction.response.defer(thinking=True, ephemeral=True)
 
-        url = url.strip()
+        query = query.strip()
 
         # Handle playlist URLs
-        if youtube_audio.is_valid_youtube_playlist(url):
-            logger.info("Received play command for playlist URL: %s", url)
-            self.bot.loop.create_task(self._do_play_playlist(interaction, url))
-            return None
+        if youtube_audio.is_valid_youtube_playlist(query):
+            logger.info("Received play command for playlist URL: '%s'", query)
+            self.bot.loop.create_task(self._do_play_playlist(interaction, query))
+            return
 
         # Handle youtube videos
-        if not youtube_audio.is_valid_youtube_url(url):
-            return await interaction.followup.send(
-                "Invalid YouTube URL. Please provide a valid link.", ephemeral=True
-            )
+        if youtube_audio.is_valid_youtube_url(query):
+            logger.info("Received play command for URL: '%s'", query)
+            self.bot.loop.create_task(self._do_play(interaction, query))
+            return
 
-        logger.info("Received play command for URL: %s", url)
-        self.bot.loop.create_task(self._do_play(interaction, url))
+        # Fall back to searching youtube and asking the user to select a search result
+        if query:
+            logger.info("Recieved a string. Searching youtube for videos. '%s'", query)
+            self.bot.loop.create_task(self._do_search_youtube(interaction, query))
+            return
 
-        return None
+        # Failed to do anything. I think this is only reached if the query is empty?
+        await interaction.followup.send(
+            content=(
+                "Invalid play command. Please provide a valid youtube video "
+                "or playlist link, or a searchable string."
+            ),
+        )
+        return
+
+    async def _do_search_youtube(
+        self, interaction: discord.Interaction, query: str
+    ) -> None:
+        # Results are a list of tuples: (url, name, duration)
+        results = await youtube_audio.search_youtube(query)
+
+        msg = f"Searched youtube and got {len(results)} results:"
+        for result in results:
+            duration = youtube_audio.sec_to_string(result[2])
+            msg += f"\n - {result[1]} ({duration})"
+        return await interaction.followup.send(msg, ephemeral=True)
 
     async def _do_play_playlist(
         self, interaction: discord.Interaction, playlist_url: str
@@ -120,8 +141,6 @@ class MusicCommands(commands.Cog):
                 "Join a voice channel first.", ephemeral=True
             )
 
-        # TODO: If this is not a valid YouTube URL, we should handle it gracefully
-
         vc = await discord_utils.ensure_connected(
             interaction.guild,
             member.voice.channel,
@@ -158,7 +177,7 @@ class MusicCommands(commands.Cog):
             if pos > 1
             else f"▶️    Now playing **{track_meta['title']}**"
         )
-        await interaction.followup.send(msg)
+        await interaction.followup.send(msg, ephemeral=False)
 
         # wait for the background fetch to complete (so file is ready later)
         try:
@@ -220,9 +239,7 @@ class MusicCommands(commands.Cog):
             msg = "**Upcoming tracks:**\n" + "\n".join(lines)
 
             # format runtime as H:MM:SS or M:SS
-            total_runtime_str = time.strftime("%H:%M:%S", time.gmtime(total_runtime))
-            # strip leading "00:" for videos under an hour
-            total_runtime_str = total_runtime_str.removeprefix("00:")
+            total_runtime_str = youtube_audio.sec_to_string(total_runtime)
             msg += f"\n\n🔮    Total runtime: {total_runtime_str}"
 
         await interaction.followup.send(msg, ephemeral=True)
