@@ -37,5 +37,10 @@ RUN make unpack
 
 COPY . /app
 
+# Cache directories
+ENV AUDIO_CACHE_DIR="/app/audio_cache"
+
+VOLUME ["/app/audio_cache"]
+
 # default command
 ENTRYPOINT ["start.sh"]
