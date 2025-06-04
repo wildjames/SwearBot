@@ -368,6 +368,75 @@ async def test_get_playlist_video_urls_error(tmp_dirs, monkeypatch):
     # On yt-dlp error we return []]
     assert result == []
 
+# -- search_youtube tests --
+
+@pytest.mark.asyncio
+async def test_search_youtube_success(tmp_dirs, monkeypatch):
+    cache_dir, tmp_dir = tmp_dirs
+    mod = import_module(cache_dir, tmp_dir)
+
+    # Prepare fake entries: include some invalid ones to ensure filtering
+    fake_entries = [
+        {"id": "VIDA1234567", "title": "First Video", "duration": 120},
+        {"id": None, "title": "MissingID", "duration": 90},
+        {"id": "VIDB2345678", "title": "Second Video", "duration": None},
+        {"id": "VIDC3456789", "title": None, "duration": 150},
+        {"id": "VIDD4567890", "title": "Third Video", "duration": 200},
+    ]
+
+    class FakeDL:
+        def __init__(self, opts): pass
+        def __enter__(self): return self
+        def __exit__(self, exc_type, exc, tb): pass
+        def extract_info(self, search_str, download=False):
+            # Return fake entries under 'entries' key
+            return {"entries": fake_entries}
+
+    monkeypatch.setattr(mod, "YoutubeDL", FakeDL)
+
+    # Request top 2 valid results
+    results = await mod.search_youtube("test query", n=2)
+    assert isinstance(results, list)
+    # Should filter out entries missing id or title
+    assert len(results) == 2
+    # First valid entry: ID and title correct
+    assert results[0] == ("https://www.youtube.com/watch?v=VIDA1234567", "First Video", 120)
+    # Second valid entry: skip missingID and missing title, next is VIDC? No, VIDC has title None, skip. Then VIDD.
+    assert results[1] == ("https://www.youtube.com/watch?v=VIDD4567890", "Third Video", 200)
+
+@pytest.mark.asyncio
+async def test_search_youtube_download_error(tmp_dirs, monkeypatch):
+    cache_dir, tmp_dir = tmp_dirs
+    mod = import_module(cache_dir, tmp_dir)
+
+    class FailDL:
+        def __init__(self, opts): pass
+        def __enter__(self): return self
+        def __exit__(self, exc_type, exc, tb): pass
+        def extract_info(self, search_str, download=False): raise DownloadError("search failed")
+
+    monkeypatch.setattr(mod, "YoutubeDL", FailDL)
+
+    results = await mod.search_youtube("anything", n=3)
+    assert results == []
+
+@pytest.mark.asyncio
+async def test_search_youtube_info_none(tmp_dirs, monkeypatch):
+    cache_dir, tmp_dir = tmp_dirs
+    mod = import_module(cache_dir, tmp_dir)
+
+    class FakeDLNone:
+        def __init__(self, opts): pass
+        def __enter__(self): return self
+        def __exit__(self, exc_type, exc, tb): pass
+        def extract_info(self, search_str, download=False): return None
+
+    monkeypatch.setattr(mod, "YoutubeDL", FakeDLNone)
+
+    with pytest.raises(TypeError) as excinfo:
+        await mod.search_youtube("no info", n=1)
+    assert "Retrieved info from youtube was None" in str(excinfo.value)
+
 # -- Real integration test --
 @pytest.mark.asyncio
 @pytest.mark.integration

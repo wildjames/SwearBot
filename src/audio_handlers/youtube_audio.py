@@ -112,6 +112,17 @@ _VALID_YT_PLAYLIST_URL = re.compile(
 )
 
 
+def sec_to_string(val: float) -> str:
+    """Convert a number of seconds to a human-readable string, (HH:)MM:SS."""
+    sec_in_hour = 60 * 60
+    d = ""
+    if val >= sec_in_hour:
+        d += f"{int(val // sec_in_hour):02d}:"
+        val = val % sec_in_hour
+    d += f"{int(val // 60):02d}:{int(val % 60):02d}"
+    return d
+
+
 def is_valid_youtube_url(url: str) -> bool:
     """Check if a URL is a valid YouTube video URL."""
     return _VALID_YT_URL_RE.match(url) is not None
@@ -239,6 +250,7 @@ async def _download_opus(url: str, opus_tmp: Path) -> None:
     # Ensure directory exists
     opus_tmp.parent.mkdir(parents=True, exist_ok=True)
     ydl_opts: dict[str, Any] = {
+        "logger": logger,
         "format": "bestaudio/best",
         "quiet": True,
         "noprogress": True,
@@ -358,6 +370,7 @@ async def get_playlist_video_urls(playlist_url: str) -> list[str]:
         return []
 
     ydl_opts: dict[str, Any] = {
+        "logger": logger,
         "quiet": True,
         "skip_download": True,
         "extract_flat": "in_playlist",
@@ -390,3 +403,63 @@ async def get_playlist_video_urls(playlist_url: str) -> list[str]:
         video_urls.append(f"https://www.youtube.com/watch?v={vid_id}")
 
     return video_urls
+
+
+async def search_youtube(search: str, n: int = 5) -> list[tuple[str, str, float]]:
+    """Given a search string, return the top `n` results.
+
+    Returns a list of (url, title, duration (s)
+    """
+    ydl_opts: dict[str, Any] = {
+        "logger": logger,
+        "extract_flat": True,
+        "forceid": True,
+        "forcetitle": True,
+        "noprogress": True,
+        "quiet": True,
+        "skip_download": True,
+    }
+
+    # As a kludge, search for an extra two entries and only return the top 5 video
+    # results
+    search = f"ytsearch{n + 2}:{search}"
+
+    try:
+        # Run the (blocking) extract info call in an async thread
+        def _run_extract() -> dict[str, Any] | None:
+            with YoutubeDL(ydl_opts) as ydl:
+                return ydl.extract_info(search, download=False)  # type: ignore[no-typing]
+
+        info: dict[str, Any] | None = await asyncio.to_thread(_run_extract)
+
+    except DownloadError as e:
+        logger.warning("yt-dlp failed to extract search for %s: %s", search, e)
+        return []
+    except Exception:
+        logger.exception("Unexpected error fetching search for %s", search)
+        return []
+
+    if info is None:
+        msg = "Retrieved info from youtube was None"
+        raise TypeError(msg)
+
+    entries = cast("list[dict[str, Any]]", info.get("entries")) or []  # type: ignore[no-typing]
+
+    results: list[tuple[str, str, float]] = []
+    for entry in entries:
+        # Only keep actual videos (they always have a "duration" field)
+        duration = entry.get("duration")
+        video_id = entry.get("id")
+        title = entry.get("title")
+
+        if duration is None or not video_id or not title:
+            # missing duration is a channel/playlist/etc.
+            continue
+
+        url = f"https://www.youtube.com/watch?v={video_id}"
+        results.append((url, title, duration))
+        if len(results) == n:
+            break
+
+    logger.info('Search for "%s" return %d results', search, len(results))
+    return results
