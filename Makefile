@@ -36,8 +36,13 @@ clean:
 docker-build:
 	docker build -t balaambot:latest .
 
+HOST_CACHED_DIR=$(PWD)/audio_cache
+
 docker-run:
-	docker run --rm -it balaambot:latest
+	@mkdir -p $(HOST_CACHED_DIR)
+	docker run --rm -it \
+		-v $(HOST_CACHED_DIR):/app/audio_cache \
+		balaambot:latest
 
 docker-brun: docker-build docker-run
 
