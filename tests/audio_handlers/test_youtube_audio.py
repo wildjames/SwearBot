@@ -29,6 +29,18 @@ def tmp_dirs(tmp_path):
     tmp_dir.mkdir()
     return cache_dir, tmp_dir
 
+# -- Directory creation tests --
+def test_directories_created(tmp_dirs):
+    cache_dir, tmp_dir = tmp_dirs
+    mod = import_module(cache_dir, tmp_dir)
+    # Module should create and expose audio_cache_dir and audio_tmp_dir
+    assert hasattr(mod, 'audio_cache_dir')
+    assert hasattr(mod, 'audio_tmp_dir')
+    assert mod.audio_cache_dir == cache_dir.resolve()
+    assert mod.audio_tmp_dir == tmp_dir.resolve()
+    assert mod.audio_cache_dir.exists()
+    assert mod.audio_tmp_dir.exists()
+
 # -- URL/id and path tests --
 
 @pytest.mark.parametrize("url,expected_id", [
@@ -61,6 +73,21 @@ def test_get_cache_path_param(tmp_dirs, url, rate, channels, expected_suffix):
     assert path.parent == cache_dir.resolve()
     assert path.name == expected_suffix
 
+# -- Temp path tests --
+@pytest.mark.parametrize("url", [
+    "https://youtu.be/IDABCDE1234",
+    "https://www.youtube.com/watch?v=XYZ12345678",
+])
+def test_get_temp_paths(tmp_dirs, url):
+    cache_dir, tmp_dir = tmp_dirs
+    mod = import_module(cache_dir, tmp_dir)
+    opus_tmp, pcm_tmp = mod._get_temp_paths(url)
+    vid = mod._get_video_id(url)
+    assert opus_tmp.parent == tmp_dir.resolve()
+    assert pcm_tmp.parent == tmp_dir.resolve()
+    assert opus_tmp.name == f"{vid}.opus.part"
+    assert pcm_tmp.name == f"{vid}.pcm.part"
+
 # -- is_valid_youtube_url tests --
 @pytest.mark.parametrize("url,valid", [
     ("https://www.youtube.com/watch?v=abcdEFGHijk", True),
@@ -72,6 +99,19 @@ def test_is_valid_youtube_url(tmp_dirs, url, valid):
     cache_dir, tmp_dir = tmp_dirs
     mod = import_module(cache_dir, tmp_dir)
     assert mod.is_valid_youtube_url(url) == valid
+
+# -- is_valid_youtube_playlist tests --
+@pytest.mark.parametrize("url,valid", [
+    ("https://www.youtube.com/playlist?list=PL67890", True),
+    ("https://www.youtube.com/watch?v=PL123456789&list=PL67890", True),
+    ("https://youtu.be/XYZ12345678?list=ABCDEF&foo=bar", True),
+    ("https://www.youtube.com/watch?v=abcdefghiJK", False),
+    ("not a playlist", False),
+])
+def test_is_valid_youtube_playlist(tmp_dirs, url, valid):
+    cache_dir, tmp_dir = tmp_dirs
+    mod = import_module(cache_dir, tmp_dir)
+    assert mod.is_valid_youtube_playlist(url) == valid
 
 # -- Sync API tests for PCM retrieval/removal --
 
@@ -134,7 +174,7 @@ async def test_fetch_audio_pcm_success(tmp_dirs, monkeypatch):
         cache_path.write_bytes(b"\x00" * 10)
 
     async def fake_get_youtube_track_metadata(url):
-        return {"title": "fake title"}
+        return {"title": "fake title", "runtime": 0, "runtime_str": "00:00:00", "url": url}
 
     monkeypatch.setattr(mod, '_download_opus', fake_download_opus)
     monkeypatch.setattr(mod, '_convert_opus_to_pcm', fake_convert_opus)
@@ -161,11 +201,8 @@ async def test_fetch_audio_pcm_ffmpeg_fail(tmp_dirs, monkeypatch):
         opus_tmp.parent.mkdir(parents=True, exist_ok=True)
         opus_tmp.write_bytes(b"")
 
-    monkeypatch.setattr(mod, '_download_opus', fake_download_opus)
-
-    # Simulate ffmpeg failure in conversion
     class DummyProcessFail:
-        def __init__(self, returncode=1, stderr=b"error"):  # noqa: D107
+        def __init__(self, returncode=1, stderr=b"error"):
             self.returncode = returncode
             self._stderr = stderr
         async def communicate(self):
@@ -175,8 +212,9 @@ async def test_fetch_audio_pcm_ffmpeg_fail(tmp_dirs, monkeypatch):
         return DummyProcessFail()
 
     async def fake_get_youtube_track_metadata(url):
-        return {"title": "fake title"}
+        return {"title": "fake title", "runtime": 0, "runtime_str": "00:00:00", "url": url}
 
+    monkeypatch.setattr(mod, '_download_opus', fake_download_opus)
     monkeypatch.setattr(mod, "get_youtube_track_metadata", fake_get_youtube_track_metadata)
     monkeypatch.setattr(asyncio, 'create_subprocess_exec', fake_create)
 
@@ -194,29 +232,33 @@ async def test_fetch_audio_pcm_auth_error(tmp_dirs):
 # -- Track name tests --
 
 @pytest.mark.asyncio
-async def test_get_youtube_track_name_success(tmp_dirs, monkeypatch):
+async def test_get_youtube_track_metadata_success_and_format(tmp_dirs, monkeypatch):
     cache_dir, tmp_dir = tmp_dirs
     mod = import_module(cache_dir, tmp_dir)
     url = 'https://youtu.be/TRACKID12345'
 
+    # Simulate metadata with duration > 1 hour
     class DYDL:
         def __init__(self, opts): pass
         def __enter__(self): return self
         def __exit__(self, exc_type, exc, tb): pass
-        def extract_info(self, url, download=False): return {'title': 'My Track', 'url': 'audio_url'}
-        def prepare_filename(self, info, outtmpl): return info['title']
+        def extract_info(self, url, download=False):
+            return {'title': 'My Track', 'duration': 3665}
 
     monkeypatch.setattr(mod, 'YoutubeDL', DYDL)
     meta = await mod.get_youtube_track_metadata(url)
-    assert meta["title"] == 'My Track'
+    assert meta['title'] == 'My Track'
+    assert isinstance(meta['runtime'], int)
+    assert meta['runtime'] == 3665
+    assert meta['runtime_str'] == '01:01:05'
+    assert meta['url'] == url
 
-    # cached
+    # Cached behavior
     meta2 = await mod.get_youtube_track_metadata(url)
-    assert meta2["title"] == 'My Track'
-
+    assert meta2 == meta
 
 @pytest.mark.asyncio
-async def test_get_youtube_track_name_error(tmp_dirs, monkeypatch):
+async def test_get_youtube_track_metadata_error(tmp_dirs, monkeypatch):
     cache_dir, tmp_dir = tmp_dirs
     mod = import_module(cache_dir, tmp_dir)
     url = 'https://youtu.be/BADID'
@@ -229,6 +271,171 @@ async def test_get_youtube_track_name_error(tmp_dirs, monkeypatch):
 
     monkeypatch.setattr(mod, 'YoutubeDL', DYDLFail)
     assert await mod.get_youtube_track_metadata(url) is None
+
+# -- Playlist URL tests --
+@pytest.mark.parametrize("url,expected", [
+    ("https://www.youtube.com/playlist?list=PL67890", True),
+    ("https://www.youtube.com/watch?v=PL123456789&list=PL67890", True),
+    ("https://www.youtube.com/playlist?list=PLtyo3aqsNv_Oe686OmaAi1heDjjnxYRmw", True),
+    ("https://youtu.be/XYZ12345678?list=ABCDEF&foo=bar", True),
+    ("https://www.youtube.com/watch?v=abcdefghiJK", False),
+    ("https://youtu.be/abcdefghiJK", False),
+    # malformed
+    ("not a url at all", False),
+])
+def test_check_is_playlist(tmp_dirs, url, expected):
+    cache_dir, tmp_dir = tmp_dirs
+    mod = import_module(cache_dir, tmp_dir)
+    assert mod.check_is_playlist(url) is expected
+
+
+# -- get_playlist_video_urls tests --
+
+@pytest.mark.asyncio
+async def test_get_playlist_video_urls_no_list(tmp_dirs):
+    cache_dir, tmp_dir = tmp_dirs
+    mod = import_module(cache_dir, tmp_dir)
+    # URL without 'list' should immediately return empty list
+    url = "https://www.youtube.com/watch?v=abcdefghiJK"
+    result = await mod.get_playlist_video_urls(url)
+    assert result == []
+
+@pytest.mark.asyncio
+async def test_get_playlist_video_urls_info_none(tmp_dirs, monkeypatch):
+    cache_dir, tmp_dir = tmp_dirs
+    mod = import_module(cache_dir, tmp_dir)
+    playlist_id = "PLTESTID"
+    playlist_url = f"https://www.youtube.com/playlist?list={playlist_id}"
+
+    # Simulate extract_info returning None
+    class FakeDLNone:
+        def __init__(self, opts): pass
+        def __enter__(self): return self
+        def __exit__(self, exc_type, exc, tb): pass
+        def extract_info(self, url, download=False): return None
+
+    monkeypatch.setattr(mod, 'YoutubeDL', FakeDLNone)
+    with pytest.raises(TypeError) as excinfo:
+        await mod.get_playlist_video_urls(playlist_url)
+    assert "Retrieved info from youtube was None" in str(excinfo.value)
+
+@pytest.mark.asyncio
+async def test_get_playlist_video_urls_success(tmp_dirs, monkeypatch):
+    cache_dir, tmp_dir = tmp_dirs
+    mod = import_module(cache_dir, tmp_dir)
+    playlist_id = "PLtyo3aqsNv_Oe686OmaAi1heDjjnxYRmw"
+    playlist_url = f"https://www.youtube.com/playlist?list={playlist_id}"
+
+    # Stub out YoutubeDL to return a fake playlist
+    class FakeDL:
+        def __init__(self, opts): pass
+        def __enter__(self): return self
+        def __exit__(self, exc_type, exc, tb): pass
+        def extract_info(self, url, download=False):
+            # simulate flat-playlist entries
+            return {
+                "entries": [
+                    {"id": "VID11111111"},
+                    {"id": "VID22222222"},
+                ]
+            }
+
+    monkeypatch.setattr(mod, "YoutubeDL", FakeDL)
+
+    result = await mod.get_playlist_video_urls(playlist_url)
+    assert isinstance(result, list)
+    assert result == [
+        "https://www.youtube.com/watch?v=VID11111111",
+        "https://www.youtube.com/watch?v=VID22222222",
+    ]
+
+@pytest.mark.asyncio
+async def test_get_playlist_video_urls_error(tmp_dirs, monkeypatch):
+    cache_dir, tmp_dir = tmp_dirs
+    mod = import_module(cache_dir, tmp_dir)
+    playlist_url = "https://www.youtube.com/playlist?list=PLFAKEID123"
+
+    # Raise DownloadError inside extract_info
+    class FailDL:
+        def __init__(self, opts): pass
+        def __enter__(self): return self
+        def __exit__(self, exc_type, exc, tb): pass
+        def extract_info(self, url, download=False): raise DownloadError("playlist fetch failed")
+
+    monkeypatch.setattr(mod, "YoutubeDL", FailDL)
+
+    result = await mod.get_playlist_video_urls(playlist_url)
+    # On yt-dlp error we return []]
+    assert result == []
+
+# -- search_youtube tests --
+
+@pytest.mark.asyncio
+async def test_search_youtube_success(tmp_dirs, monkeypatch):
+    cache_dir, tmp_dir = tmp_dirs
+    mod = import_module(cache_dir, tmp_dir)
+
+    # Prepare fake entries: include some invalid ones to ensure filtering
+    fake_entries = [
+        {"id": "VIDA1234567", "title": "First Video", "duration": 120},
+        {"id": None, "title": "MissingID", "duration": 90},
+        {"id": "VIDB2345678", "title": "Second Video", "duration": None},
+        {"id": "VIDC3456789", "title": None, "duration": 150},
+        {"id": "VIDD4567890", "title": "Third Video", "duration": 200},
+    ]
+
+    class FakeDL:
+        def __init__(self, opts): pass
+        def __enter__(self): return self
+        def __exit__(self, exc_type, exc, tb): pass
+        def extract_info(self, search_str, download=False):
+            # Return fake entries under 'entries' key
+            return {"entries": fake_entries}
+
+    monkeypatch.setattr(mod, "YoutubeDL", FakeDL)
+
+    # Request top 2 valid results
+    results = await mod.search_youtube("test query", n=2)
+    assert isinstance(results, list)
+    # Should filter out entries missing id or title
+    assert len(results) == 2
+    # First valid entry: ID and title correct
+    assert results[0] == ("https://www.youtube.com/watch?v=VIDA1234567", "First Video", 120)
+    # Second valid entry: skip missingID and missing title, next is VIDC? No, VIDC has title None, skip. Then VIDD.
+    assert results[1] == ("https://www.youtube.com/watch?v=VIDD4567890", "Third Video", 200)
+
+@pytest.mark.asyncio
+async def test_search_youtube_download_error(tmp_dirs, monkeypatch):
+    cache_dir, tmp_dir = tmp_dirs
+    mod = import_module(cache_dir, tmp_dir)
+
+    class FailDL:
+        def __init__(self, opts): pass
+        def __enter__(self): return self
+        def __exit__(self, exc_type, exc, tb): pass
+        def extract_info(self, search_str, download=False): raise DownloadError("search failed")
+
+    monkeypatch.setattr(mod, "YoutubeDL", FailDL)
+
+    results = await mod.search_youtube("anything", n=3)
+    assert results == []
+
+@pytest.mark.asyncio
+async def test_search_youtube_info_none(tmp_dirs, monkeypatch):
+    cache_dir, tmp_dir = tmp_dirs
+    mod = import_module(cache_dir, tmp_dir)
+
+    class FakeDLNone:
+        def __init__(self, opts): pass
+        def __enter__(self): return self
+        def __exit__(self, exc_type, exc, tb): pass
+        def extract_info(self, search_str, download=False): return None
+
+    monkeypatch.setattr(mod, "YoutubeDL", FakeDLNone)
+
+    with pytest.raises(TypeError) as excinfo:
+        await mod.search_youtube("no info", n=1)
+    assert "Retrieved info from youtube was None" in str(excinfo.value)
 
 # -- Real integration test --
 @pytest.mark.asyncio

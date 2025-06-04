@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import pathlib
 
 import discord
 from discord.ext import commands
@@ -34,12 +35,14 @@ async def on_ready() -> None:
 
 async def load_extensions() -> None:
     """Load all the available bot extensions."""
-    for ext in [
-        "src.bot_commands.sfx_commands",
-        "src.bot_commands.music_commands",
-        "src.bot_commands.bot_commands",
-    ]:
-        await bot.load_extension(ext)
+    commands_path = pathlib.Path(__file__).parent / "bot_commands"
+    extension_files = sorted(commands_path.glob("*.py"), key=lambda f: f.name)
+
+    for ext_file in extension_files:
+        if ext_file.name != "__init__.py":
+            ext_path = f"src.bot_commands.{ext_file.stem}"
+            logger.info("Loading extension: %s", ext_path)
+            await bot.load_extension(ext_path)
 
 
 def start() -> None:

@@ -258,11 +258,11 @@ async def test_clear_and_list_queue():
     ytj.youtube_queue[50] = ["a", "b", "c"]
 
     await ytj.clear_queue(vc)
-    assert 50 not in ytj.youtube_queue
+    assert 50 in ytj.youtube_queue
 
     # list_queue on empty
     result = await ytj.list_queue(vc)
-    assert result == []
+    assert result == ["a"]
 
 
 @pytest.mark.asyncio
