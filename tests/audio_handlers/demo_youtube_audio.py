@@ -1,4 +1,18 @@
-from src.audio_handlers.youtube_audio import *
+import asyncio
+import logging
+
+from src.audio_handlers.youtube_audio import (
+    fetch_audio_pcm,
+    get_youtube_track_metadata,
+    get_audio_pcm,
+    remove_audio_pcm,
+    get_playlist_video_urls,
+    search_youtube,
+)
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
+
 
 if __name__ == "__main__":
     test_url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
@@ -44,5 +58,13 @@ if __name__ == "__main__":
         logger.info("URLs:")
         for url in urls:
             logger.info(" - %s", url)
+
+        # search for a video
+        search = "aphex twin"
+        logger.info("Fetching search results for query '%s'", search)
+        results = await search_youtube(search)
+        logger.info("Results:")
+        for result in results:
+            logger.info(" - %s", result)
 
     asyncio.run(main())
