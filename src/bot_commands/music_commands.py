@@ -1,10 +1,12 @@
 import asyncio
 import logging
+from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING
 
 import discord
-from discord import app_commands
+from discord import Client, InteractionCallbackResponse, app_commands
 from discord.ext import commands
+from discord.ui import Button, View
 
 from src import discord_utils
 from src.audio_handlers import youtube_audio
@@ -14,6 +16,55 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+
+class SearchView(View):
+    """A view containing buttons for selecting search results."""
+
+    def __init__(
+        self, parent: "MusicCommands", results_list: list[tuple[str, str, float]]
+    ) -> None:
+        """Set up the internal structures."""
+        super().__init__(timeout=None)  # no timeout so buttons remain valid
+        self.results = results_list
+        self.parent = parent
+
+        for idx, (url, title, _) in enumerate(self.results):
+            button = Button(  # type: ignore  This type error is daft and I hate it so fuck that
+                label=f"{idx + 1}",
+                style=discord.ButtonStyle.primary,
+                custom_id=f"search_select_{idx}",
+            )
+
+            # Bind a callback that knows which index was clicked
+            button.callback = self.make_callback(idx, url, title)
+            self.add_item(button)
+
+    def make_callback(
+        self, idx: int, url: str, title: str
+    ) -> Callable[
+        [discord.Interaction], Awaitable[InteractionCallbackResponse[Client] | None]
+    ]:
+        """Handle the clicking of the buttons."""
+
+        async def callback(
+            inner_interaction: discord.Interaction,
+        ) -> InteractionCallbackResponse[Client] | None:
+            # Log which result the user picked
+            logger.info(
+                'User %s selected search result #%d: %s ("%s")',
+                inner_interaction.user.name,
+                idx + 1,
+                url,
+                title,
+            )
+
+            await inner_interaction.response.edit_message(
+                content=f"Playing {title}", view=None, delete_after=5
+            )
+            await self.parent.do_play(inner_interaction, url)
+
+        return callback
 
 
 class MusicCommands(commands.Cog):
@@ -36,19 +87,19 @@ class MusicCommands(commands.Cog):
         # Handle playlist URLs
         if youtube_audio.is_valid_youtube_playlist(query):
             logger.info("Received play command for playlist URL: '%s'", query)
-            self.bot.loop.create_task(self._do_play_playlist(interaction, query))
+            self.bot.loop.create_task(self.do_play_playlist(interaction, query))
             return
 
         # Handle youtube videos
         if youtube_audio.is_valid_youtube_url(query):
             logger.info("Received play command for URL: '%s'", query)
-            self.bot.loop.create_task(self._do_play(interaction, query))
+            self.bot.loop.create_task(self.do_play(interaction, query))
             return
 
         # Fall back to searching youtube and asking the user to select a search result
         if query:
             logger.info("Recieved a string. Searching youtube for videos. '%s'", query)
-            self.bot.loop.create_task(self._do_search_youtube(interaction, query))
+            self.bot.loop.create_task(self.do_search_youtube(interaction, query))
             return
 
         # Failed to do anything. I think this is only reached if the query is empty?
@@ -60,19 +111,38 @@ class MusicCommands(commands.Cog):
         )
         return
 
-    async def _do_search_youtube(
+    async def do_search_youtube(
         self, interaction: discord.Interaction, query: str
     ) -> None:
-        # Results are a list of tuples: (url, name, duration)
+        """Search for videos based on the query and display selection buttons."""
         results = await youtube_audio.search_youtube(query)
+        # Each result is a tuple: (url, title, duration_in_seconds)
 
-        msg = f"Searched youtube and got {len(results)} results:"
-        for result in results:
-            duration = youtube_audio.sec_to_string(result[2])
-            msg += f"\n - {result[1]} ({duration})"
-        return await interaction.followup.send(msg, ephemeral=True)
+        if not results:
+            await interaction.followup.send(
+                "No results found for your query.", ephemeral=True
+            )
+            return
 
-    async def _do_play_playlist(
+        # Build a text block describing each result line by line
+        lines: list[str] = []
+        for idx, (_, title, duration_secs) in enumerate(results):
+            duration_str = youtube_audio.sec_to_string(duration_secs)
+            lines.append(f"**{idx + 1}.** {title} ({duration_str})")
+
+        description = (
+            "Select a track by clicking the corresponding button:\n\n"
+            + "\n".join(lines)
+        )
+
+        # Send the reply with the View
+        await interaction.followup.send(
+            content=description,
+            view=SearchView(self, results),
+            ephemeral=True,
+        )
+
+    async def do_play_playlist(
         self, interaction: discord.Interaction, playlist_url: str
     ) -> None:
         """Handle enqueuing all videos from a YouTube playlist."""
@@ -125,7 +195,8 @@ class MusicCommands(commands.Cog):
         await fetch_tasks[0]
         return None
 
-    async def _do_play(self, interaction: discord.Interaction, url: str) -> None:
+    async def do_play(self, interaction: discord.Interaction, url: str) -> None:
+        """Play a YouTube video by fetching and streaming the audio from the URL."""
         if interaction.guild is None:
             return await interaction.followup.send(
                 "This command can only be used in a server.", ephemeral=True
