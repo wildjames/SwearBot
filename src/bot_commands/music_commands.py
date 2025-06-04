@@ -37,8 +37,8 @@ class SearchView(View):
             )
 
             # Bind a callback that knows which index was clicked
-            button.callback = self.make_callback(idx, url, title)
-            self.add_item(button)
+            button.callback = self.make_callback(idx, url, title)  # type: ignore The button is well defined
+            self.add_item(button)  # type: ignore The button is well defined
 
     def make_callback(
         self, idx: int, url: str, title: str
