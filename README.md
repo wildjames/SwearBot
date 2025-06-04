@@ -50,10 +50,10 @@ These are things that will likely take over an hour
 
 - [ ] Multiple people sending commands at once seems to not work - test
 - [ ] Youtube age restricts some content, so I need to implement auth
-- [ ] Allow users to search youtube for videos
 - [ ] Commands need to have guard clauses abstracted out into some discord utility functions
 - [ ] Add a way to scrub the currently playing track?
 - [ ] Send a message when a new track starts to play
+- [x] Allow users to search youtube for videos
 - [x] Youtube playlist support
 - [x] Test coverage is abysmal. Expand to cover all the stuff I've done since I last did a push on tests.
 
