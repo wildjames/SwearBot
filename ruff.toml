@@ -20,7 +20,6 @@ exclude = [
     ".vscode",
     "__pypackages__",
     "_build",
-    "tests/",
     "buck-out",
     "build",
     "dist",
@@ -40,12 +39,26 @@ target-version = "py312"
 # Enable Pyflakes (`F`) and a subset of the pycodestyle (`E`)  codes by default.
 select = ["ALL"]
 ignore = [
-    "COM812", "COM819",
-    "D100", "D203", "D213", "D300", "D401",
-    "E111", "E114", "E117",
-    "ISC001", "ISC002",
-    "TD002", "TD003", "TD002", "FIX002",
-    "Q000", "Q001", "Q002", "Q003",
+    "COM812",
+    "COM819",
+    "D100",
+    "D203",
+    "D213",
+    "D300",
+    "D401",
+    "E111",
+    "E114",
+    "E117",
+    "ISC001",
+    "ISC002",
+    "TD002",
+    "TD003",
+    "TD002",
+    "FIX002",
+    "Q000",
+    "Q001",
+    "Q002",
+    "Q003",
     "W191",
     "ERA001",
 ]
@@ -69,3 +82,7 @@ skip-magic-trailing-comma = false
 
 # Like Black, automatically detect the appropriate line ending.
 line-ending = "auto"
+
+[lint.per-file-ignores]
+# Ignore all directories named `tests`.
+"tests/**" = ["INP001", "S101"]

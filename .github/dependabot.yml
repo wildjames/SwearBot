@@ -1,12 +1,12 @@
 version: 2
-updates:
 
+updates:
   - package-ecosystem: pip
-    directory: "/"
+    directory: /
     schedule:
       interval: daily
     commit-message:
-      prefix: "chore(poetry)"
+      prefix: "chore(uv)"
 
   - package-ecosystem: github-actions
     directory: /

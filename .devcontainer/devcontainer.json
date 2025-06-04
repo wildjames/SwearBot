@@ -1,12 +1,13 @@
 {
-    "name": "Poetry",
+    "name": "uv",
     "build": {
         "context": "..",
-        "dockerfile": "Dockerfile"
+        "dockerfile": "Dockerfile",
+        "args": {
+            "UV_VERSION": "latest",
+            "DEBIAN_VERSION": "bookworm"
+        }
     },
-    "mounts": [
-        "source=${env:HOME}${env:USERPROFILE}/.ssh,target=/home/vscode/.ssh,type=bind"
-    ],
     "features": {
         "ghcr.io/devcontainers-extra/features/pre-commit:2": {},
         "ghcr.io/dhoeric/features/hadolint:1": {},
@@ -29,36 +30,23 @@
                 "mosapride.zenkaku",
                 "ms-azuretools.vscode-docker",
                 "ms-python.python",
+                "ms-python.vscode-pylance",
                 "njpwerner.autodocstring",
-                "pkief.material-icon-theme",
+                "redhat.vscode-yaml",
                 "shardulm94.trailing-spaces",
                 "usernamehw.errorlens",
+                "tamasfe.even-better-toml",
                 "yzhang.markdown-all-in-one"
-            ],
-            "settings": {
-                "python.defaultInterpreterPath": "/opt/.pyenv/shims/python",
-                "[python]": {
-                    "editor.defaultFormatter": "charliermarsh.ruff",
-                    "editor.codeActionsOnSave": {
-                        "source.fixAll.ruff": "explicit",
-                        "source.organizeImports.ruff": "explicit"
-                    },
-                    "editor.formatOnSave": true
-                },
-                "files.insertFinalNewline": true,
-                "files.trimTrailingWhitespace": true,
-                "terminal.integrated.profiles.linux": {
-                    "zsh": {
-                        "path": "/bin/zsh",
-                        "args": [
-                            "-l"
-                        ]
-                    }
-                },
-                "terminal.integrated.defaultProfile.linux": "zsh"
-            }
+            ]
         }
     },
+    "containerEnv": {
+        "DISPLAY": "dummy",
+        "PYTHONUNBUFFERED": "True",
+        "UV_LINK_MODE": "copy",
+        "UV_PROJECT_ENVIRONMENT": "/home/vscode/.venv"
+    },
+    "postCreateCommand": "uv sync --frozen",
     "postStartCommand": "pre-commit install && make install-dev",
     "remoteUser": "vscode"
 }
