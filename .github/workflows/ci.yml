@@ -26,11 +26,6 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install Poetry
-        run: |
-          export PYTHONUNBUFFERED=1
-          pip install poetry
-
       - name: Install Dependencies
         run: make install
 
