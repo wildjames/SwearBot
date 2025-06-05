@@ -1,10 +1,11 @@
 # type: ignore
-import os
 import asyncio
 import logging
+import os
+
 import pytest
 
-import src.main as main
+from balaambot import main
 
 
 class DummySync:
@@ -50,10 +51,10 @@ async def test_load_extensions(monkeypatch):
     await main.load_extensions()
 
     assert loaded == [
-        "src.bot_commands.bot_commands",
-        "src.bot_commands.joke_commands",
-        "src.bot_commands.music_commands",
-        "src.bot_commands.sfx_commands",
+        "balaambot.bot_commands.bot_commands",
+        "balaambot.bot_commands.joke_commands",
+        "balaambot.bot_commands.music_commands",
+        "balaambot.bot_commands.sfx_commands",
     ]
 
 
