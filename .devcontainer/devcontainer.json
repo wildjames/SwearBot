@@ -9,7 +9,6 @@
         }
     },
     "features": {
-        "ghcr.io/devcontainers-extra/features/pre-commit:2": {},
         "ghcr.io/dhoeric/features/hadolint:1": {},
         "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {
             "version": "latest",
@@ -47,6 +46,6 @@
         "UV_PROJECT_ENVIRONMENT": "/home/vscode/.venv"
     },
     "postCreateCommand": "make install-dev",
-    "postStartCommand": "pre-commit install",
+    "postStartCommand": "uv run pre-commit install",
     "remoteUser": "vscode"
 }
