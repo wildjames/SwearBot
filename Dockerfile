@@ -1,34 +1,35 @@
-FROM python:3.12-slim
+ARG DEBIAN_VERSION=bookworm
+ARG UV_VERSION=latest
+ARG VARIANT=3.13
 
-ENV POETRY_VERSION=1.8.2 \
-    POETRY_VIRTUALENVS_CREATE=false \
-    PYTHONUNBUFFERED=1
+
+FROM ghcr.io/astral-sh/uv:$UV_VERSION AS uv
+
+
+FROM python:$VARIANT-slim-$DEBIAN_VERSION
 
 WORKDIR /app
 
-# system deps for building wheels
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-        build-essential=12.9 \
-        ca-certificates=20230311 \
-        curl=7.88.1-10+deb12u12 \
-        ffmpeg=7:5.1.6-0+deb12u1 \
-        libopus0=1.3.1-3 \
-        make=4.3-4.1 \
-        unzip=6.0-28 \
+COPY --from=uv /uv /uvx /bin/
+COPY pyproject.toml uv.lock ./
+
+ENV PYTHONDONTWRITEBYTECODE=True
+ENV PYTHONUNBUFFERED=True
+ENV UV_LINK_MODE=copy
+
+# hadolint ignore=DL3008
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+    build-essential=12.9 \
+    ca-certificates=20230311 \
+    curl=7.88.1-10+deb12u12 \
+    ffmpeg=7:5.1.6-0+deb12u1 \
+    libopus0=1.3.1-3 \
+    make=4.3-4.1 \
+    unzip=6.0-28 \
+    # To remove the image size, it is recommended refresh the package cache as follows
+    && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
-
-RUN pip install --no-cache-dir "poetry==$POETRY_VERSION"
-
-# copy poetry files and install only prod deps
-COPY pyproject.toml poetry.lock* /app/
-RUN poetry install --no-root --no-dev
-
-WORKDIR /app
-
-# entrypoint script
-COPY start.sh /usr/local/bin/start.sh
-RUN chmod +x /usr/local/bin/start.sh
 
 # bring in the zip so we can unpack at runtime
 COPY sounds.zip /app/sounds.zip
@@ -42,5 +43,8 @@ ENV AUDIO_CACHE_DIR="/app/audio_cache"
 
 VOLUME ["/app/audio_cache"]
 
+# entrypoint script
+RUN chmod +x ./start.sh
+
 # default command
-ENTRYPOINT ["start.sh"]
+ENTRYPOINT ["./start.sh"]

@@ -1,19 +1,18 @@
-.PHONY: install lint run clean unpack
+.PHONY: install-dev lint run clean unpack
 
-install:
-	poetry install
-
+# Installs both normal and dev dependencies
+# Not needed for running as uv run handles deps itself
 install-dev:
-	poetry install --all-groups
+	uv sync
 
 lint:
-	ruff check .
+	uv run ruff check .
 
 build:
-	poetry build
+	uv build
 
 run:
-	poetry run balaambot
+	uv run balaambot
 
 unpack:
 	unzip -u sounds.zip
@@ -41,13 +40,14 @@ HOST_CACHED_DIR=$(PWD)/audio_cache
 docker-run:
 	@mkdir -p $(HOST_CACHED_DIR)
 	docker run --rm -it \
+		--env-file .env \
 		-v $(HOST_CACHED_DIR):/app/audio_cache \
 		balaambot:latest
 
 docker-brun: docker-build docker-run
 
 test:
-	poetry run pytest -m "not integration"
+	uv run pytest -m "not integration"
 
 test-integration:
-	poetry run pytest -m integration
+	uv run pytest -m integration

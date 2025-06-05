@@ -9,7 +9,7 @@ from typing import TypedDict
 
 from discord import AudioSource, VoiceClient
 
-from src.audio_handlers.youtube_audio import (
+from balaambot.audio_handlers.youtube_audio import (
     fetch_audio_pcm,
     get_audio_pcm,
 )

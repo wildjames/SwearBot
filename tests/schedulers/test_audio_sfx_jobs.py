@@ -1,11 +1,12 @@
 # type: ignore
-import pytest
 import asyncio
 import random
 import uuid
 
-import src.schedulers.audio_sfx_jobs as sfx
-from src import discord_utils
+import pytest
+
+import balaambot.schedulers.audio_sfx_jobs as sfx
+from balaambot import discord_utils
 
 
 @pytest.fixture(autouse=True)
@@ -15,10 +16,12 @@ def clear_jobs(monkeypatch):
     yield
     sfx.loop_jobs.clear()
 
+
 class DummyGuild:
     def __init__(self, id, vc=None):
         self.id = id
         self.voice_client = vc
+
 
 class DummyVC:
     def __init__(self, guild_id, connected=True):
@@ -38,12 +41,14 @@ class DummyVC:
         self._connected = True
         return self
 
+
 class DummyChannel:
     def __init__(self, vc):
         self._vc = vc
 
     async def connect(self, cls=DummyVC):
         return self._vc
+
 
 class DummyLogger:
     def __init__(self):
@@ -73,10 +78,12 @@ async def test_add_and_remove_job_disconnect(monkeypatch):
     await sfx.remove_job(job_id)
     assert job_id not in sfx.loop_jobs
 
+
 @pytest.mark.asyncio
 async def test_remove_job_not_found():
     with pytest.raises(KeyError):
         await sfx.remove_job("nonexistent")
+
 
 @pytest.mark.asyncio
 async def test_ensure_connected_existing(monkeypatch):
@@ -94,6 +101,7 @@ async def test_ensure_connected_existing(monkeypatch):
     out2 = await discord_utils.ensure_connected(guild2, channel2)
     assert out2 is new_vc
 
+
 @pytest.mark.asyncio
 async def test_play_sfx_loop_client_not_connected(monkeypatch):
     # Setup dummy VC that's not connected
@@ -109,6 +117,7 @@ async def test_play_sfx_loop_client_not_connected(monkeypatch):
     await sfx._play_sfx_loop(vc, job_id)
     assert job_id not in sfx.loop_jobs
 
+
 @pytest.mark.asyncio
 async def test_play_sfx_loop_play_error(monkeypatch):
     # Setup dummy VC always connected
@@ -120,21 +129,23 @@ async def test_play_sfx_loop_play_error(monkeypatch):
     sfx.loop_jobs[job_id] = (vc, dummy_task, "sound.wav", 0.0, 0.0)
 
     # Patch random.uniform to zero wait
-    monkeypatch.setattr(random, 'uniform', lambda a, b: 0.0)
+    monkeypatch.setattr(random, "uniform", lambda a, b: 0.0)
 
     # Patch asyncio.sleep to no-op
     orig_sleep = asyncio.sleep
-    monkeypatch.setattr(asyncio, 'sleep', lambda x, _orig=orig_sleep: _orig(0))
+    monkeypatch.setattr(asyncio, "sleep", lambda x, _orig=orig_sleep: _orig(0))
 
     # Patch utils.get_mixer_from_voice_client to throw
     async def fake_get_mixer(vc_in):
         raise RuntimeError("fail")
-    monkeypatch.setattr(discord_utils, 'get_mixer_from_voice_client', fake_get_mixer)
+
+    monkeypatch.setattr(discord_utils, "get_mixer_from_voice_client", fake_get_mixer)
 
     await sfx._play_sfx_loop(vc, job_id)
 
     # Should remove job due to error
     assert job_id not in sfx.loop_jobs
+
 
 @pytest.mark.asyncio
 async def test_play_sfx_loop_success_one_iteration(monkeypatch):
@@ -146,10 +157,12 @@ async def test_play_sfx_loop_success_one_iteration(monkeypatch):
     class DummyMixer:
         def __init__(self):
             self.played = []
+
         def play_file(self, sound, after_play=None):
             # simulate immediate playback
             if after_play:
                 after_play()
+
     dummy_mixer = DummyMixer()
 
     # Insert a real dummy task so remove_job can cancel it
@@ -157,28 +170,32 @@ async def test_play_sfx_loop_success_one_iteration(monkeypatch):
     sfx.loop_jobs[job_id] = (vc, dummy_task, "sound.wav", 0.0, 0.0)
 
     # Patch random.uniform and sleep
-    monkeypatch.setattr(random, 'uniform', lambda a, b: 0.0)
+    monkeypatch.setattr(random, "uniform", lambda a, b: 0.0)
     orig_sleep = asyncio.sleep
-    monkeypatch.setattr(asyncio, 'sleep', lambda x, _orig=orig_sleep: _orig(0))
+    monkeypatch.setattr(asyncio, "sleep", lambda x, _orig=orig_sleep: _orig(0))
 
     # Patch utils.get_mixer_from_voice_client
     async def fake_get_mixer(vc_in):
         return dummy_mixer
-    monkeypatch.setattr(discord_utils, 'get_mixer_from_voice_client', fake_get_mixer)
+
+    monkeypatch.setattr(discord_utils, "get_mixer_from_voice_client", fake_get_mixer)
 
     # To exit after one iteration, remove job within after_play
     original_after = dummy_mixer.play_file
+
     def wrapped_play_file(sound, after_play=None):
         # call original then schedule removal
         original_after(sound, after_play)
         # remove job to break loop
         asyncio.get_event_loop().create_task(sfx.remove_job(job_id))
+
     dummy_mixer.play_file = wrapped_play_file
 
     # Run loop
     task = asyncio.create_task(sfx._play_sfx_loop(vc, job_id))
     await asyncio.wait_for(task, timeout=1)
     assert job_id not in sfx.loop_jobs
+
 
 @pytest.fixture(autouse=True)
 def clear_loop_jobs():
@@ -190,9 +207,7 @@ def clear_loop_jobs():
 
 @pytest.mark.asyncio
 async def test_play_sfx_loop_job_not_found(monkeypatch):
-    """
-    If the job_id isn't in loop_jobs at the start, we should log and exit cleanly.
-    """
+    """If the job_id isn't in loop_jobs at the start, we should log and exit cleanly."""
     vc = DummyVC(guild_id=42, connected=True)
     dummy_logger = DummyLogger()
     monkeypatch.setattr(sfx, "logger", dummy_logger)
@@ -206,9 +221,7 @@ async def test_play_sfx_loop_job_not_found(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_play_sfx_loop_cancelled(monkeypatch):
-    """
-    If asyncio.sleep raises CancelledError, the loop should log cancellation and re-raise.
-    """
+    """If asyncio.sleep raises CancelledError, the loop should log cancellation and re-raise."""
     vc = DummyVC(guild_id=99, connected=True)
     job_id = uuid.uuid4().hex
 
@@ -234,9 +247,7 @@ async def test_play_sfx_loop_cancelled(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_stop_all_jobs_calls_remove_only_for_target_vc(monkeypatch):
-    """
-    stop_all_jobs should invoke remove_job() exactly for those jobs whose vc matches.
-    """
+    """stop_all_jobs should invoke remove_job() exactly for those jobs whose vc matches."""
     vc1 = DummyVC(guild_id=1)
     vc2 = DummyVC(guild_id=2)
 
@@ -250,8 +261,10 @@ async def test_stop_all_jobs_calls_remove_only_for_target_vc(monkeypatch):
     sfx.loop_jobs["job3"] = (vc2, t3, "c.wav", 0.1, 0.2)
 
     called = []
+
     async def fake_remove_job(jid):
         called.append(jid)
+
     monkeypatch.setattr(sfx, "remove_job", fake_remove_job)
 
     await sfx.stop_all_jobs(vc1)

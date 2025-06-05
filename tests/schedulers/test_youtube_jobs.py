@@ -1,9 +1,10 @@
 # type: ignore
 import asyncio
+
 import pytest
 
-import src.schedulers.youtube_jobs as ytj
-from src import discord_utils
+import balaambot.schedulers.youtube_jobs as ytj
+from balaambot import discord_utils
 
 
 class DummyGuild:
@@ -78,17 +79,14 @@ async def test_add_to_queue_subsequent_items_do_not_schedule(monkeypatch, dummy_
     scheduled = False
 
     # First invocation: schedule
-    monkeypatch.setattr(
-        vc.loop,
-        "create_task",
-        lambda coro: asyncio.sleep(0)
-    )
+    monkeypatch.setattr(vc.loop, "create_task", lambda coro: asyncio.sleep(0))
     await ytj.add_to_queue(vc, "first")
 
     # Second invocation: patch create_task to fail if called
     def fail_create_task(_):
         nonlocal scheduled
         scheduled = True
+
     monkeypatch.setattr(vc.loop, "create_task", fail_create_task)
 
     await ytj.add_to_queue(vc, "second")
@@ -107,6 +105,7 @@ async def test_add_to_queue_create_task_fails_clears_queue(monkeypatch):
     # Patch create_task to raise
     def bad_create_task(_):
         raise RuntimeError("no loop")
+
     monkeypatch.setattr(vc.loop, "create_task", bad_create_task)
 
     with pytest.raises(RuntimeError):
@@ -149,15 +148,13 @@ async def test_play_next_success(monkeypatch, dummy_logger):
     monkeypatch.setattr(
         discord_utils,
         "get_mixer_from_voice_client",
-        lambda vc_in: asyncio.sleep(0, result=dummy_mixer)
+        lambda vc_in: asyncio.sleep(0, result=dummy_mixer),
     )
 
     # Patch create_task on vc.loop to record scheduling of next
     scheduled = []
     monkeypatch.setattr(
-        vc.loop,
-        "create_task",
-        lambda coro: scheduled.append(coro) or asyncio.sleep(0)
+        vc.loop, "create_task", lambda coro: scheduled.append(coro) or asyncio.sleep(0)
     )
 
     # Run play_next
@@ -178,6 +175,7 @@ async def test_play_next_mixer_failure(dummy_logger, monkeypatch):
     # Patch get_mixer to raise
     async def bad_mixer(_):
         raise RuntimeError("mixer bad")
+
     monkeypatch.setattr(discord_utils, "get_mixer_from_voice_client", bad_mixer)
 
     await ytj._play_next(vc)
@@ -197,7 +195,12 @@ async def test_play_next_play_youtube_raises(dummy_logger, monkeypatch):
     class Mixer:
         async def play_youtube(self, *_):
             raise RuntimeError("play error")
-    monkeypatch.setattr(discord_utils, "get_mixer_from_voice_client", lambda vc: asyncio.sleep(0, result=Mixer()))
+
+    monkeypatch.setattr(
+        discord_utils,
+        "get_mixer_from_voice_client",
+        lambda vc: asyncio.sleep(0, result=Mixer()),
+    )
 
     await ytj._play_next(vc)
 
@@ -224,6 +227,7 @@ async def test_skip_success(monkeypatch, dummy_logger):
     class Mixer:
         def __init__(self):
             self.skipped = False
+
         def skip_current_tracks(self):
             self.skipped = True
 
@@ -231,7 +235,7 @@ async def test_skip_success(monkeypatch, dummy_logger):
     monkeypatch.setattr(
         discord_utils,
         "get_mixer_from_voice_client",
-        lambda vc: asyncio.sleep(0, result=mixer)
+        lambda vc: asyncio.sleep(0, result=mixer),
     )
 
     await ytj.skip(vc)
@@ -245,8 +249,13 @@ async def test_skip_raises(monkeypatch, dummy_logger):
     class Mixer:
         def skip_current_tracks(self):
             raise RuntimeError("skip fail")
+
     mixer = Mixer()
-    monkeypatch.setattr(discord_utils, "get_mixer_from_voice_client", lambda vc: asyncio.sleep(0, result=mixer))
+    monkeypatch.setattr(
+        discord_utils,
+        "get_mixer_from_voice_client",
+        lambda vc: asyncio.sleep(0, result=mixer),
+    )
 
     await ytj.skip(vc)
     assert dummy_logger.exceptions, "Expected exception log on skip failure"
@@ -281,6 +290,7 @@ async def test_stop_success(monkeypatch, dummy_logger):
     class Mixer:
         def __init__(self):
             self.stopped = False
+
         def clear_tracks(self):
             self.stopped = True
 
@@ -288,7 +298,7 @@ async def test_stop_success(monkeypatch, dummy_logger):
     monkeypatch.setattr(
         discord_utils,
         "get_mixer_from_voice_client",
-        lambda vc: asyncio.sleep(0, result=mixer)
+        lambda vc: asyncio.sleep(0, result=mixer),
     )
 
     await ytj.stop(vc)
@@ -304,8 +314,13 @@ async def test_stop_stop_raises(monkeypatch, dummy_logger):
     class Mixer:
         def stop(self):
             raise RuntimeError("stop fail")
+
     mixer = Mixer()
-    monkeypatch.setattr(discord_utils, "get_mixer_from_voice_client", lambda vc: asyncio.sleep(0, result=mixer))
+    monkeypatch.setattr(
+        discord_utils,
+        "get_mixer_from_voice_client",
+        lambda vc: asyncio.sleep(0, result=mixer),
+    )
 
     await ytj.stop(vc)
     # queue cleared despite stop exception

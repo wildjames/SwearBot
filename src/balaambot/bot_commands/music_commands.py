@@ -8,9 +8,9 @@ from discord import Client, InteractionCallbackResponse, app_commands
 from discord.ext import commands
 from discord.ui import Button, View
 
-from src import discord_utils
-from src.audio_handlers import youtube_audio
-from src.schedulers import youtube_jobs
+from balaambot import discord_utils
+from balaambot.audio_handlers import youtube_audio
+from balaambot.schedulers import youtube_jobs
 
 if TYPE_CHECKING:
     from pathlib import Path

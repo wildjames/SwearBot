@@ -1,6 +1,6 @@
 import logging
 
-from src import discord_utils
+from balaambot import discord_utils
 
 # TODO: This should maintain a "playing" state so we can pause and resume playback
 
