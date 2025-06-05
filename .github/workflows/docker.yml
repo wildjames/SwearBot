@@ -44,6 +44,16 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Build, no push
+        uses: docker/build-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          push: false
+          tags: balaambot:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
   build-devcontainer:
     runs-on: ubuntu-latest
 
@@ -57,12 +67,12 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build and push
-        uses: docker/build-push-action@v6
+      - name: Build, no push
+        uses: docker/build-action@v6
         with:
           context: .
           file: .devcontainer/Dockerfile
           push: false
-          tags: latest
+          tags: balaambot-devcontainer:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
