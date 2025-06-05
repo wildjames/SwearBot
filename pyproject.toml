@@ -1,7 +1,7 @@
 [project]
 name = "balaambot"
 version = "0.1.0"
-description = "A discord bot that punishes cussing"
+description = "A discord bot for dutty beats"
 authors = [
     { name = "James Wild", email = "wild.james343@gmail.com" },
     { name = "Jibby", email = "Jibbajabbafic@users.noreply.github.com" },
