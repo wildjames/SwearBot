@@ -6,7 +6,7 @@ authors = [
     { name = "James Wild", email = "wild.james343@gmail.com" },
     { name = "Jibby", email = "Jibbajabbafic@users.noreply.github.com" },
 ]
-requires-python = ">=3.12.3"
+requires-python = ">=3.10"
 license = "MIT"
 dependencies = [
     "discord.py>=2.5.2",
