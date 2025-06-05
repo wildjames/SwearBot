@@ -24,6 +24,7 @@ bot = commands.Bot(
 )
 
 BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN")
+logger.info("Token: %s", BOT_TOKEN)
 
 
 @bot.event

@@ -31,12 +31,6 @@ RUN apt-get update \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-RUN uv sync --frozen --no-install-project
-
-# entrypoint script
-COPY start.sh /usr/local/bin/start.sh
-RUN chmod +x /usr/local/bin/start.sh
-
 # bring in the zip so we can unpack at runtime
 COPY sounds.zip /app/sounds.zip
 COPY Makefile /app/Makefile
@@ -49,5 +43,8 @@ ENV AUDIO_CACHE_DIR="/app/audio_cache"
 
 VOLUME ["/app/audio_cache"]
 
+# entrypoint script
+RUN chmod +x ./start.sh
+
 # default command
-ENTRYPOINT ["start.sh"]
+ENTRYPOINT ["./start.sh"]

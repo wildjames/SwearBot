@@ -27,11 +27,3 @@ repos:
         language: system
         types: ["dockerfile"]
         entry: hadolint
-
-  - repo: local
-    hooks:
-      - id: test
-        name: Run tests
-        entry: make test
-        language: system
-        stages: [pre-commit]

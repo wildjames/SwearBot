@@ -3,10 +3,10 @@
 # Installs both normal and dev dependencies
 # Not needed for running as uv run handles deps itself
 install-dev:
-	uv sync --frozen
+	uv sync
 
 lint:
-	ruff check .
+	uv run ruff check .
 
 build:
 	uv build
@@ -40,6 +40,7 @@ HOST_CACHED_DIR=$(PWD)/audio_cache
 docker-run:
 	@mkdir -p $(HOST_CACHED_DIR)
 	docker run --rm -it \
+		--env-file .env \
 		-v $(HOST_CACHED_DIR):/app/audio_cache \
 		balaambot:latest
 
