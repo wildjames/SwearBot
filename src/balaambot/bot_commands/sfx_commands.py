@@ -6,8 +6,8 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from src import discord_utils
-from src.schedulers import audio_sfx_jobs
+from balaambot import discord_utils
+from balaambot.schedulers import audio_sfx_jobs
 
 logger = logging.getLogger(__name__)
 

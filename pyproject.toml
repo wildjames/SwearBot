@@ -32,7 +32,7 @@ dev = [
 ]
 
 [project.scripts]
-balaambot = "balaambot:main"
+balaambot = "balaambot:main.start"
 
 [build-system]
 requires = ["hatchling"]
