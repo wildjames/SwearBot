@@ -46,7 +46,7 @@
         "UV_LINK_MODE": "copy",
         "UV_PROJECT_ENVIRONMENT": "/home/vscode/.venv"
     },
-    "postCreateCommand": "uv sync --frozen",
-    "postStartCommand": "pre-commit install && make install-dev",
+    "postCreateCommand": "make install-dev",
+    "postStartCommand": "pre-commit install",
     "remoteUser": "vscode"
 }

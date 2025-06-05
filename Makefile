@@ -1,11 +1,9 @@
-.PHONY: install lint run clean unpack
+.PHONY: install-dev lint run clean unpack
 
-# Not needed since uv installs automatically?
-# install:
-# 	uv install
-
-# install-dev:
-# 	uv install --all-groups
+# Installs both normal and dev dependencies
+# Not needed for running as uv run handles deps itself
+install-dev:
+	uv sync --frozen
 
 lint:
 	ruff check .
