@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
 
 jobs:
   lint-build-test:
@@ -35,10 +38,7 @@ jobs:
   docker:
     name: Docker Build & Push
     runs-on: ubuntu-latest
-
     needs: lint-build-test
-    # Only run this job on pushes to the main branch
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
 
     steps:
       - name: Checkout
