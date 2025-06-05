@@ -2,23 +2,23 @@
 name = "balaambot"
 version = "0.1.0"
 description = "A discord bot that punishes cussing"
-authors = ["James Wild <wild.james343@gmail.com>", "Jibby <Jibbajabbafic@users.noreply.github.com>"]
+authors = [
+    { name = "James Wild", email = "wild.james343@gmail.com" },
+    { name = "Jibby", email = "Jibbajabbafic@users.noreply.github.com" },
+]
+requires-python = ">=3.12.3"
 license = "MIT"
-packages = [{include="src"}]
-
-
-requires-python = ">=3.10"
+packages = [{ include = "src" }]
 readme = "README.md"
-
 dependencies = [
-    "discord.py" = "^2.5.2"
-    anyio = "^4.9.0"
-    dotenv = "^0.9.9"
-    pynacl = "^1.5.0"
-    discord-ext-voice-recv = "^0.4.2a145"
-    yt-dlp = "^2025.5.22"
-    pytest-cov = "^6.1.1"
-    pyjokes = "^0.8.3"
+    "discord.py>=2.5.2",
+    "anyio>=4.9.0",
+    "dotenv>=0.9.9",
+    "pynacl>=1.5.0",
+    "discord-ext-voice-recv>=0.4.2a145",
+    "yt-dlp>=2025.5.22",
+    "pytest-cov>=6.1.1",
+    "pyjokes>=0.8.3",
 ]
 
 [tool.uv]
@@ -30,8 +30,8 @@ dev-dependencies = [
     "ruff>=0.9.2",
 ]
 
-[tool.hatch.build.targets.wheel]
-packages = ["tools"]
+[project.scripts]
+balaambot = "balaambot:main"
 
 [build-system]
 requires = ["hatchling"]

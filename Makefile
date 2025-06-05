@@ -1,19 +1,20 @@
 .PHONY: install lint run clean unpack
 
-install:
-	poetry install
+# Not needed since uv installs automatically?
+# install:
+# 	uv install
 
-install-dev:
-	poetry install --all-groups
+# install-dev:
+# 	uv install --all-groups
 
 lint:
 	ruff check .
 
 build:
-	poetry build
+	uv build
 
 run:
-	poetry run balaambot
+	uv run balaambot
 
 unpack:
 	unzip -u sounds.zip
@@ -47,7 +48,7 @@ docker-run:
 docker-brun: docker-build docker-run
 
 test:
-	poetry run pytest -m "not integration"
+	uv run pytest -m "not integration"
 
 test-integration:
-	poetry run pytest -m integration
+	uv run pytest -m integration
