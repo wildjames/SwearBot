@@ -8,6 +8,9 @@
             "DEBIAN_VERSION": "bookworm"
         }
     },
+    "mounts": [
+        "source=${env:HOME}${env:USERPROFILE}/.ssh,target=/home/vscode/.ssh,type=bind"
+    ],
     "features": {
         "ghcr.io/dhoeric/features/hadolint:1": {},
         "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {
