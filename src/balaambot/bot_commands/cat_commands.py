@@ -1,11 +1,25 @@
+import json
 import logging
 import random
+from pathlib import Path
 
 import discord
+import pydantic
 from discord import app_commands
 from discord.ext import commands
 
 logger = logging.getLogger(__name__)
+
+SAVE_FILE = "persistent/cats.json"
+MSG_NO_CAT = (
+    "You don't have any cats yet! :crying_cat_face: Try adopting one with `/adopt`!"
+)
+
+
+class Cat(pydantic.BaseModel):
+    """Data representing a cat."""
+
+    name: str
 
 
 class CatCommands(commands.Cog):
@@ -14,42 +28,91 @@ class CatCommands(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         """Initialize the CatCommands cog."""
         self.bot = bot
-        self.cats = {}
+        self.cats = self.load_cats()
 
-    @app_commands.command(name="adopt", description="Adopt a new cat!")
-    @app_commands.describe(cat="The cat you want to pet")
+    @app_commands.command(name="adopt", description="Adopt a new cat for the server!")
+    @app_commands.describe(cat="The name of the cat to adopt")
     async def adopt_cat(self, interaction: discord.Interaction, cat: str) -> None:
-        """Try to pet a cat with a chance to fail."""
+        """Creates and saves a new pet cat."""
         logger.info("Received adopt_cat command from: %s", interaction.user)
         cat_id = cat.strip().lower()
         if cat_id in self.cats:
             await interaction.response.send_message(
-                f"You already have a cat named {cat}!",
+                f"We already have a cat named {cat}!",
             )
             return
-        self.cats[cat_id] = cat
+        # Make a new cat and save it
+        self.cats[cat_id] = Cat(name=cat)
+        self.save_cats(self.cats)
+
         await interaction.response.send_message(
-            f"You adopted a new cat called {cat}! :cat: "
+            f"You adopted a new cat called {cat}! :cat:"
         )
 
-    @app_commands.command(name="pet", description="Try to pet one of your cats!")
-    @app_commands.describe(cat="The cat you want to pet")
+    @app_commands.command(name="pet", description="Try to pet one of our cats!")
+    @app_commands.describe(cat="The name of the cat you want to pet")
     async def pet_cat(self, interaction: discord.Interaction, cat: str) -> None:
         """Try to pet a cat with a chance to fail."""
         logger.info("Received pet_cat command from: %s", interaction.user)
         cat_id = cat.strip().lower()
         if cat_id not in self.cats:
-            await interaction.response.send_message(
-                f"You don't have any cats named {cat}."
-                f"Please choose from: {', '.join(self.cats)}",
-            )
+            if self.cats:
+                await interaction.response.send_message(
+                    f"We don't have any cats named {cat}. "
+                    f"We have these:\n{self.get_cat_names()}.",
+                )
+            else:
+                await interaction.response.send_message(MSG_NO_CAT)
             return
+        cat_name = self.cats[cat_id].name
         success = random.choices([True, False], [3, 1])  # noqa: S311
         if success[0]:
-            msg = f"You successfully petted {cat}! They love it! :heart_eyes_cat:"
+            msg = f"You successfully petted {cat_name}! They love it! :heart_eyes_cat:"
         else:
-            msg = f"{cat} ran away before you could pet it!"
+            msg = f"{cat_name} ran away before you could pet them!"
         await interaction.response.send_message(msg)
+
+    @app_commands.command(name="list_cats", description="See all of our cats!")
+    async def list_cats(self, interaction: discord.Interaction) -> None:
+        """List all of the server's cats."""
+        logger.info("Received list_cats command from: %s", interaction.user)
+        if not self.cats:
+            await interaction.response.send_message(
+                MSG_NO_CAT,
+            )
+            return
+        await interaction.response.send_message(
+            f"We currently have these cats:\n{self.get_cat_names()}",
+        )
+
+    def load_cats(self) -> dict[str, Cat]:
+        """Load cats from the save file."""
+        save_file = Path(SAVE_FILE)
+        cats = {}
+        if save_file.exists():
+            with save_file.open("r") as f:
+                try:
+                    cat_data = json.load(f)
+                    cats = {k: Cat(**v) for k, v in cat_data.items()}
+                    logger.info("Loaded existing cats from %s", SAVE_FILE)
+                except json.JSONDecodeError:
+                    logger.exception("Failed to decode JSON from %s", SAVE_FILE)
+        return cats
+
+    def save_cats(self, cats: dict[str, Cat]) -> None:
+        """Save cats to the save file."""
+        save_file = Path(SAVE_FILE)
+        # Convert each Cat model to a dict
+        cats_dict = {k: v.model_dump() for k, v in cats.items()}
+        with save_file.open("w") as f:
+            json.dump(cats_dict, f, indent=4)
+        logger.info("Saved cats to %s", SAVE_FILE)
+
+    def get_cat_names(self) -> str:
+        """Get a formatted list of cat names."""
+        if not self.cats:
+            return MSG_NO_CAT
+        return "\n".join(f"- {cat.name}" for cat in self.cats.values())
 
 
 async def setup(bot: commands.Bot) -> None:
