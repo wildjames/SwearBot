@@ -7,6 +7,8 @@ import discord
 from discord.ext import commands
 from dotenv import load_dotenv
 
+import balaambot.config
+
 load_dotenv()
 
 logger = logging.getLogger(__name__)
@@ -54,7 +56,9 @@ def start() -> None:
     if BOT_TOKEN is None or BOT_TOKEN == "":
         msg = "DISCORD_BOT_TOKEN environment variable is not set."
         raise ValueError(msg)
-
+    # Docker volume to hold all persistent data
+    if not balaambot.config.PERSISTENT_DATA_DIRECTORY.exists():
+        balaambot.config.PERSISTENT_DATA_DIRECTORY.mkdir()
     asyncio.run(load_extensions())
     logger.info("Starting bot...")
     bot.run(BOT_TOKEN)

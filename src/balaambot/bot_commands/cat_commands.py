@@ -1,16 +1,17 @@
 import json
 import logging
 import random
-from pathlib import Path
 
 import discord
 import pydantic
 from discord import app_commands
 from discord.ext import commands
 
+import balaambot.config
+
 logger = logging.getLogger(__name__)
 
-SAVE_FILE = "persistent/cats.json"
+SAVE_FILE = balaambot.config.PERSISTENT_DATA_DIRECTORY / "cats.json"
 MSG_NO_CAT = (
     "You don't have any cats yet! :crying_cat_face: Try adopting one with `/adopt`!"
 )
@@ -34,7 +35,7 @@ class CatCommands(commands.Cog):
     @app_commands.describe(cat="The name of the cat to adopt")
     async def adopt_cat(self, interaction: discord.Interaction, cat: str) -> None:
         """Creates and saves a new pet cat."""
-        logger.info("Received adopt_cat command from: %s", interaction.user)
+        logger.info("Received adopt_cat command: %s (cat: %s)", interaction.user, cat)
         cat_id = cat.strip().lower()
         if cat_id in self.cats:
             await interaction.response.send_message(
@@ -53,7 +54,9 @@ class CatCommands(commands.Cog):
     @app_commands.describe(cat="The name of the cat you want to pet")
     async def pet_cat(self, interaction: discord.Interaction, cat: str) -> None:
         """Try to pet a cat with a chance to fail."""
-        logger.info("Received pet_cat command from: %s", interaction.user)
+        logger.info(
+            "Received pet_cat command from: %s (cat: %s)", interaction.user, cat
+        )
         cat_id = cat.strip().lower()
         if cat_id not in self.cats:
             if self.cats:
@@ -87,24 +90,27 @@ class CatCommands(commands.Cog):
 
     def load_cats(self) -> dict[str, Cat]:
         """Load cats from the save file."""
-        save_file = Path(SAVE_FILE)
         cats = {}
-        if save_file.exists():
-            with save_file.open("r") as f:
+        if SAVE_FILE.exists():
+            with SAVE_FILE.open("r") as f:
                 try:
                     cat_data = json.load(f)
                     cats = {k: Cat(**v) for k, v in cat_data.items()}
-                    logger.info("Loaded existing cats from %s", SAVE_FILE)
+                    logger.info("Loaded %d cat(s) from %s", len(cats), SAVE_FILE)
                 except json.JSONDecodeError:
                     logger.exception("Failed to decode JSON from %s", SAVE_FILE)
+        else:
+            logger.info("No save file found at %s", SAVE_FILE)
         return cats
 
     def save_cats(self, cats: dict[str, Cat]) -> None:
         """Save cats to the save file."""
-        save_file = Path(SAVE_FILE)
+        if not SAVE_FILE.exists():
+            logger.info("No save file found, creating a new one.")
+            SAVE_FILE.touch()
         # Convert each Cat model to a dict
         cats_dict = {k: v.model_dump() for k, v in cats.items()}
-        with save_file.open("w") as f:
+        with SAVE_FILE.open("w") as f:
             json.dump(cats_dict, f, indent=4)
         logger.info("Saved cats to %s", SAVE_FILE)
 
