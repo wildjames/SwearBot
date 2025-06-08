@@ -29,19 +29,16 @@ clean:
 	rm -rf build/ dist/ *.egg-info
 	# Remove sounds directory if it exists
 	rm -rf sounds/
-	rm -rf audio_cache/
+	rm -rf persistent/
 	rm .coverage
 
 docker-build:
 	docker build -t balaambot:latest .
 
-HOST_CACHED_DIR=$(PWD)/audio_cache
-
 docker-run:
-	@mkdir -p $(HOST_CACHED_DIR)
 	docker run --rm -it \
 		--env-file .env \
-		-v $(HOST_CACHED_DIR):/app/audio_cache \
+		-v $(PWD)/persistent:/app/persistent \
 		balaambot:latest
 
 docker-brun: docker-build docker-run

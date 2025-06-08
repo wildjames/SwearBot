@@ -17,6 +17,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# TODOs:
+# check user is in voice channel before searching for tracks
+
 
 class SearchView(View):
     """A view containing buttons for selecting search results."""

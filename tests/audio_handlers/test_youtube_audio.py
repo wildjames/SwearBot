@@ -7,12 +7,13 @@ from pathlib import Path
 
 import pytest
 from yt_dlp.utils import DownloadError
+import balaambot.config
 
 
 # Helper to import the module under test with custom dirs
 def import_module(tmp_cache_root: Path):
-    # Set environment variable before import
-    os.environ["AUDIO_CACHE_DIR"] = str(tmp_cache_root)
+    # Set config variable before import
+    balaambot.config.PERSISTENT_DATA_DIR = str(tmp_cache_root)
 
     # Ensure a fresh import
     module_name = "src.balaambot.audio_handlers.youtube_audio"
@@ -38,10 +39,10 @@ def test_directories_created(tmp_cache_root):
     assert hasattr(mod, "audio_cache_dir")
     assert hasattr(mod, "audio_tmp_dir")
 
-    # In the new code, AUDIO_CACHE_DIR is treated as the root, and subdirectories
+    # In the new code, PERSISTENT_DATA_DIR/audio_cache is treated as the root, and subdirectories
     # 'cached' and 'downloading' are created underneath it
-    expected_cache = (tmp_cache_root / "cached").resolve()
-    expected_tmp = (tmp_cache_root / "downloading").resolve()
+    expected_cache = (tmp_cache_root / "audio_cache/cached").resolve()
+    expected_tmp = (tmp_cache_root / "audio_cache/downloading").resolve()
 
     assert mod.audio_cache_dir == expected_cache
     assert mod.audio_tmp_dir == expected_tmp
@@ -87,7 +88,7 @@ def test_get_video_id_various_urls(tmp_cache_root):
 def test_get_cache_path_param(tmp_cache_root, url, rate, channels, expected_suffix):
     mod = import_module(tmp_cache_root)
     path = mod._get_cache_path(url, rate, channels)
-    expected_parent = (tmp_cache_root / "cached").resolve()
+    expected_parent = (tmp_cache_root / "audio_cache/cached").resolve()
     assert path.parent == expected_parent
     assert path.name == expected_suffix
 
@@ -104,7 +105,7 @@ def test_get_temp_paths(tmp_cache_root, url):
     mod = import_module(tmp_cache_root)
     opus_tmp, pcm_tmp = mod._get_temp_paths(url)
     vid = mod._get_video_id(url)
-    expected_tmp_dir = (tmp_cache_root / "downloading").resolve()
+    expected_tmp_dir = (tmp_cache_root / "audio_cache/downloading").resolve()
     assert opus_tmp.parent == expected_tmp_dir
     assert pcm_tmp.parent == expected_tmp_dir
     assert opus_tmp.name == f"{vid}.opus.part"
