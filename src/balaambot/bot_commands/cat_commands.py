@@ -10,6 +10,12 @@ from discord.ext import commands
 
 import balaambot.config
 
+# TODOs:
+# Use one model for everything to save together
+# Key cats by discord server
+# fuzzy search for cat names (try pkg: the fuzz)
+# move message strings to separate file (cat_commands_strings.py?)
+
 logger = logging.getLogger(__name__)
 
 SAVE_FILE = pathlib.Path(balaambot.config.PERSISTENT_DATA_DIR) / "cats.json"
