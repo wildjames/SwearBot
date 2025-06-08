@@ -62,10 +62,6 @@ RUN apt-get update \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Audio cache directories
-ENV AUDIO_CACHE_DIR="/app/audio_cache"
-VOLUME ["/app/audio_cache"]
-
 # Mount persistent data directories
 ENV PERSISTENT_DATA_DIR="/app/persistent"
 VOLUME ["/app/persistent"]

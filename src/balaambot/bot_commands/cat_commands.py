@@ -1,5 +1,6 @@
 import json
 import logging
+import pathlib
 import random
 
 import discord
@@ -11,7 +12,7 @@ import balaambot.config
 
 logger = logging.getLogger(__name__)
 
-SAVE_FILE = balaambot.config.PERSISTENT_DATA_DIRECTORY / "cats.json"
+SAVE_FILE = pathlib.Path(balaambot.config.PERSISTENT_DATA_DIR) / "cats.json"
 MSG_NO_CAT = (
     "You don't have any cats yet! :crying_cat_face: Try adopting one with `/adopt`!"
 )
