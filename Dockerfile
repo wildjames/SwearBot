@@ -66,7 +66,11 @@ RUN apt-get update \
 ENV AUDIO_CACHE_DIR="/app/audio_cache"
 VOLUME ["/app/audio_cache"]
 
-# # Copy sound effects from the builder
+# Mount persistent data directories
+ENV PERSISTENT_DATA_DIR="/app/persistent"
+VOLUME ["/app/persistent"]
+
+# Copy sound effects from the builder
 COPY --from=builder --chown=app:app /app/sounds /app/sounds
 
 # Copy the app and pre-built venv from the builder - that should be all that's needed
