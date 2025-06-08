@@ -1,15 +1,22 @@
 default_stages: [pre-commit]
 repos:
+  - repo: https://github.com/astral-sh/uv-pre-commit
+    # uv version.
+    rev: 0.7.11
+    hooks:
+      # Keep the lock file up to date.
+      - id: uv-lock
+
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.11.11
     hooks:
-    - id: ruff
-      name: Ruff check
-      description: "Run 'ruff check' for extremely fast Python linting"
+      - id: ruff
+        name: Ruff check
+        description: "Run 'ruff check' for extremely fast Python linting"
 
-    - id: ruff-format
-      name: Ruff format
-      description: "Run 'ruff format' for extremely fast Python formatting"
+      - id: ruff-format
+        name: Ruff format
+        description: "Run 'ruff format' for extremely fast Python formatting"
 
   - repo: https://github.com/hadolint/hadolint
     rev: v2.13.1-beta
@@ -20,11 +27,3 @@ repos:
         language: system
         types: ["dockerfile"]
         entry: hadolint
-
-  - repo: local
-    hooks:
-      - id: test
-        name: Run tests
-        entry: make test
-        language: system
-        stages: [pre-commit]

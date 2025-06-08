@@ -5,8 +5,8 @@ import subprocess
 
 import pytest
 
-import src.audio_handlers.multi_audio_source as mas
-from src.audio_handlers.multi_audio_source import (
+import balaambot.audio_handlers.multi_audio_source as mas
+from balaambot.audio_handlers.multi_audio_source import (
     MultiAudioSource,
     _mixers,
     ensure_mixer,
@@ -168,6 +168,7 @@ async def test_ensure_mixer_creates_and_reuses():
     assert mixer2 is mixer1
     assert vc2.played == []
 
+
 @pytest.fixture(autouse=True)
 def clear_mixers_and_tracks():
     # Clear global mixer registry and ensure fresh instances
@@ -221,6 +222,7 @@ async def test_play_youtube_success(monkeypatch):
 
     async def fake_fetch(url_in, sample_rate, channels, username, password):
         calls.append((url_in, sample_rate, channels, username, password))
+
     monkeypatch.setattr(mas, "fetch_audio_pcm", fake_fetch)
     monkeypatch.setattr(mas, "get_audio_pcm", lambda u: pcm_bytes if u == url else None)
 
@@ -246,6 +248,7 @@ async def test_play_youtube_missing_cache(monkeypatch):
     async def fake_fetch(url_in, sample_rate, channels, username, password):
         # no-op
         return
+
     monkeypatch.setattr(mas, "fetch_audio_pcm", fake_fetch)
     monkeypatch.setattr(mas, "get_audio_pcm", lambda u: None)
 
@@ -263,6 +266,7 @@ def test_mix_samples_with_callback_and_padding():
 
     # samples length 1, so needs padding for second sample
     samples = array.array("h", [5])
+
     def cb():
         called.append(True)
 
@@ -287,8 +291,16 @@ def test_skip_current_tracks_invokes_callbacks_and_clears():
 
     called = []
     # Two tracks with after_play handlers
-    t1 = {"samples": array.array("h", [1, 2]), "pos": 1, "after_play": lambda: called.append("a")}
-    t2 = {"samples": array.array("h", [3, 4, 5]), "pos": 2, "after_play": lambda: called.append("b")}
+    t1 = {
+        "samples": array.array("h", [1, 2]),
+        "pos": 1,
+        "after_play": lambda: called.append("a"),
+    }
+    t2 = {
+        "samples": array.array("h", [3, 4, 5]),
+        "pos": 2,
+        "after_play": lambda: called.append("b"),
+    }
     src._tracks = [t1, t2]
 
     src.skip_current_tracks()
@@ -300,7 +312,13 @@ def test_skip_current_tracks_invokes_callbacks_and_clears():
 
 def test_skip_current_tracks_callback_exceptions_are_swallowed():
     src = MultiAudioSource()
-    src._tracks = [{"samples": array.array("h", [1]), "pos": 0, "after_play": lambda: (_ for _ in ()).throw(ValueError())}]
+    src._tracks = [
+        {
+            "samples": array.array("h", [1]),
+            "pos": 0,
+            "after_play": lambda: (_ for _ in ()).throw(ValueError()),
+        }
+    ]
     # Should not raise
     src.skip_current_tracks()
     assert src._tracks == []  # track removed despite exception

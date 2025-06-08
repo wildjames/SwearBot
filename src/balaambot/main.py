@@ -37,10 +37,14 @@ async def load_extensions() -> None:
     """Load all the available bot extensions."""
     commands_path = pathlib.Path(__file__).parent / "bot_commands"
     extension_files = sorted(commands_path.glob("*.py"), key=lambda f: f.name)
+    if len(extension_files) == 0:
+        logger.fatal(
+            "No extensions found to load. Please double check the paths are correct."
+        )
 
     for ext_file in extension_files:
         if ext_file.name != "__init__.py":
-            ext_path = f"src.bot_commands.{ext_file.stem}"
+            ext_path = f"balaambot.bot_commands.{ext_file.stem}"
             logger.info("Loading extension: %s", ext_path)
             await bot.load_extension(ext_path)
 
