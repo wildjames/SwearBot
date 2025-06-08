@@ -112,7 +112,7 @@ class CatCommands(commands.Cog):
         cats_dict = {k: v.model_dump() for k, v in cats.items()}
         with SAVE_FILE.open("w") as f:
             json.dump(cats_dict, f, indent=4)
-        logger.info("Saved cats to %s", SAVE_FILE)
+        logger.info("Saved %d cat(s) to %s", len(cats_dict), SAVE_FILE)
 
     def get_cat_names(self) -> str:
         """Get a formatted list of cat names."""
