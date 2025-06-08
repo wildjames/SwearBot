@@ -1,4 +1,3 @@
-import json
 import logging
 import pathlib
 
@@ -11,7 +10,6 @@ logger = logging.getLogger(__name__)
 SAVE_FILE = pathlib.Path(balaambot.config.PERSISTENT_DATA_DIR) / "cats.json"
 
 # TODOs:
-# Use one model for everything to save together
 # Key cats by discord server
 # fuzzy search for cat names (try pkg: the fuzz)
 # move message strings to separate file (cat_commands_strings.py?)
@@ -23,10 +21,10 @@ class Cat(pydantic.BaseModel):
     name: str
 
 
-# class CatData(pydantic.BaseModel):
-#     """Data class holding cats indexed by server and cat name."""
+class CatData(pydantic.BaseModel):
+    """Data class holding cats indexed by server and cat name."""
 
-#     cats: dict[str, dict[str, Cat]]
+    cats: dict[str, Cat]
 
 
 class CatHandler:
@@ -34,7 +32,7 @@ class CatHandler:
 
     def __init__(self) -> None:
         """Initialize the CatHandler."""
-        self.cats = self._load_cats()
+        self.db = self._load_cat_db()
 
     def get_num_cats(self) -> int:
         """How many cats there are.
@@ -43,7 +41,7 @@ class CatHandler:
             int: Number of cats
 
         """
-        return len(self.cats)
+        return len(self.db.cats)
 
     def get_cat(self, cat_name: str) -> str | None:
         """Check if cat exists and return their name if they do.
@@ -57,13 +55,13 @@ class CatHandler:
 
         """
         cat_id = self._get_cat_id(cat_name)
-        if cat_id in self.cats:
-            return self.cats[cat_id].name
+        if cat_id in self.db.cats:
+            return self.db.cats[cat_id].name
         return None
 
     def get_cat_names(self) -> str:
         """Get a formatted list of cat names."""
-        return "\n".join(f"- {cat.name}" for cat in self.cats.values())
+        return "\n".join(f"- {cat.name}" for cat in self.db.cats.values())
 
     def add_cat(self, cat_name: str) -> None:
         """Creates a new cat.
@@ -74,34 +72,36 @@ class CatHandler:
         """
         cat_id = self._get_cat_id(cat_name)
         # Make a new cat and save it
-        self.cats[cat_id] = Cat(name=cat_name)
-        self._save_cats(self.cats)
+        self.db.cats[cat_id] = Cat(name=cat_name)
+        self._save_cat_db(self.db)
 
     def _get_cat_id(self, cat_name: str) -> str:
         return cat_name.strip().lower()
 
-    def _load_cats(self) -> dict[str, Cat]:
+    def _load_cat_db(self) -> CatData:
         """Load cats from the save file."""
-        cats = {}
-        if SAVE_FILE.exists():
-            with SAVE_FILE.open("r") as f:
-                try:
-                    cat_data = json.load(f)
-                    cats = {k: Cat(**v) for k, v in cat_data.items()}
-                    logger.info("Loaded %d cat(s) from %s", len(cats), SAVE_FILE)
-                except json.JSONDecodeError:
-                    logger.exception("Failed to decode JSON from %s", SAVE_FILE)
-        else:
+        if not SAVE_FILE.exists():
             logger.info("No save file found at %s", SAVE_FILE)
-        return cats
+            return CatData(cats={})
 
-    def _save_cats(self, cats: dict[str, Cat]) -> None:
+        with SAVE_FILE.open("r") as f:
+            try:
+                json_data = f.read()
+                db = CatData.model_validate_json(json_data)
+            except pydantic.ValidationError:
+                logger.exception(
+                    "Failed to decode CatData from: %s\nCreating new one.", SAVE_FILE
+                )
+                return CatData(cats={})
+            logger.info("Loaded %d cat(s) from %s", len(db.cats), SAVE_FILE)
+            return db
+
+    def _save_cat_db(self, db: CatData) -> None:
         """Save cats to the save file."""
         if not SAVE_FILE.exists():
             logger.info("No save file found, creating a new one.")
             SAVE_FILE.touch()
-        # Convert each Cat model to a dict
-        cats_dict = {k: v.model_dump() for k, v in cats.items()}
+        # Save as JSON
         with SAVE_FILE.open("w") as f:
-            json.dump(cats_dict, f, indent=4)
-        logger.info("Saved %d cat(s) to %s", len(cats_dict), SAVE_FILE)
+            f.write(db.model_dump_json(indent=4))
+        logger.info("Saved %d cat(s) to %s", len(db.cats), SAVE_FILE)

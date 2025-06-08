@@ -6,10 +6,20 @@
         {
             "label": "Run Bot",
             "type": "shell",
-            "command": "make run",
+            "command": "make docker-brun",
             "problemMatcher": [],
             "group": {
                 "kind": "build",
+                "isDefault": true
+            }
+        },
+        {
+            "label": "Run Tests",
+            "type": "shell",
+            "command": "make test",
+            "problemMatcher": [],
+            "group": {
+                "kind": "test",
                 "isDefault": true
             }
         }

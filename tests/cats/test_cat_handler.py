@@ -1,7 +1,7 @@
 import json
 import pytest
 import types
-from balaambot.cats.cat_handler import CatHandler, Cat
+from balaambot.cats.cat_handler import CatHandler, CatData
 from balaambot.cats import cat_handler
 
 @pytest.fixture
@@ -22,41 +22,47 @@ def patch_logger(monkeypatch):
 
 def test_init_no_file(patch_save_file, patch_logger):
     handler = CatHandler()
-    assert handler.cats == {}
+    assert handler.db.cats == {}
     assert handler.get_num_cats() == 0
 
 def test_init_with_valid_file(patch_save_file, patch_logger):
-    cats_data = {"mittens": {"name": "Mittens"}}
+    cats_data = {"cats": {"mittens": {"name": "Mittens"}}}
     patch_save_file.write_text(json.dumps(cats_data))
     handler = CatHandler()
-    assert "mittens" in handler.cats
-    assert handler.cats["mittens"].name == "Mittens"
+    assert "mittens" in handler.db.cats
+    assert isinstance(handler.db.cats["mittens"], cat_handler.Cat)
+    assert handler.db.cats["mittens"].name == "Mittens"
 
-def test_init_with_invalid_json(patch_save_file, monkeypatch):
-    patch_save_file.write_text("{not valid json")
+def test_init_with_invalid_json(patch_save_file, patch_logger, monkeypatch):
     logged = {}
     def fake_exception(msg, *a, **k): logged["called"] = True
+    # Patch logger before creating the handler
     monkeypatch.setattr(cat_handler, "logger", types.SimpleNamespace(
         info=lambda *a, **k: None,
         exception=fake_exception,
     ))
+    patch_save_file.write_text("{not valid json")
     handler = CatHandler()
-    assert handler.cats == {}
     assert logged.get("called")
 
 def test_add_cat_creates_and_persists(patch_save_file, patch_logger):
     handler = CatHandler()
     handler.add_cat("Whiskers")
+    cat_obj = handler.db.cats.get("whiskers")
+    assert isinstance(cat_obj, cat_handler.Cat)
+    assert cat_obj.name == "Whiskers"
     assert handler.get_cat("whiskers") == "Whiskers"
     # File should exist and contain the cat
     with patch_save_file.open() as f:
         data = json.load(f)
-    assert "whiskers" in data
-    assert data["whiskers"]["name"] == "Whiskers"
+    assert "cats" in data
+    assert "whiskers" in data["cats"]
+    assert data["cats"]["whiskers"]["name"] == "Whiskers"
 
 def test_add_cat_normalizes_id(patch_save_file, patch_logger):
     handler = CatHandler()
     handler.add_cat("  Fluffy  ")
+    # All these should return the original name as stored
     assert handler.get_cat("fluffy") == "  Fluffy  "
     assert handler.get_cat("  FLUFFY") == "  Fluffy  "
     assert handler.get_cat("FlUfFy") == "  Fluffy  "
@@ -84,7 +90,9 @@ def test_save_creates_file_if_missing(patch_save_file, patch_logger):
     assert patch_save_file.exists()
     with patch_save_file.open() as f:
         data = json.load(f)
-    assert "zed" in data
+    assert "cats" in data
+    assert "zed" in data["cats"]
+    assert data["cats"]["zed"]["name"] == "Zed"
 
 def test_get_cat_id_normalization(patch_save_file, patch_logger):
     handler = CatHandler()
