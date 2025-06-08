@@ -7,6 +7,9 @@ inputs:
   python-version:
     description: Python version
     required: true
+  uv-version:
+    description: uv tool version
+    required: true
 
 runs:
   using: composite
@@ -16,6 +19,7 @@ runs:
       uses: astral-sh/setup-uv@v6
       with:
         enable-cache: true
+        version: ${{ inputs.uv-version }}
         python-version: ${{ inputs.python-version }}
 
     - name: Install Dependencies

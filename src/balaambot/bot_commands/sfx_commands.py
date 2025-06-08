@@ -12,6 +12,16 @@ from balaambot.schedulers import audio_sfx_jobs
 logger = logging.getLogger(__name__)
 
 
+# TODOs:
+# - too many sounds in the zip
+#   - `/list_sfx`` gives an error because it hits the message size limit
+# - check if sfx file exists before running it and joining channel
+# - sanitize sfx file names and find files with similar names
+# - add fuzzy search
+# - add basic file browser with discord msg buttons
+# - intergrate with soundboard api?
+
+
 class SFXCommands(commands.Cog):
     """Slash commands for scheduling and triggering SFX jobs."""
 

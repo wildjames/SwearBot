@@ -1,7 +1,6 @@
 import asyncio
 import atexit
 import logging
-import os
 import re
 import shutil
 import time
@@ -11,12 +10,14 @@ from typing import Any, TypedDict, cast
 
 from yt_dlp import DownloadError, YoutubeDL  # type: ignore[import]
 
+import balaambot.config
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_SAMPLE_RATE = 48000  # Default sample rate for PCM audio
 DEFAULT_CHANNELS = 2  # Default number of audio channels (stereo)
 
-AUDIO_CACHE_ROOT = os.getenv("AUDIO_CACHE_DIR", "./audio_cache")
+AUDIO_CACHE_ROOT = Path(balaambot.config.PERSISTENT_DATA_DIR) / "audio_cache"
 
 logger.info(
     "Using a sample rate of %dHz with %d channels",
@@ -26,11 +27,11 @@ logger.info(
 logger.info("Using audio download and caching directory: '%s'", AUDIO_CACHE_ROOT)
 
 # Directory for caching PCM audio files
-audio_cache_dir = Path(AUDIO_CACHE_ROOT + "/cached").resolve()
+audio_cache_dir = (AUDIO_CACHE_ROOT / "cached").resolve()
 audio_cache_dir.mkdir(parents=True, exist_ok=True)
 
 # Temporary directory for in-progress downloads
-audio_tmp_dir = Path(AUDIO_CACHE_ROOT + "/downloading").resolve()
+audio_tmp_dir = (AUDIO_CACHE_ROOT / "downloading").resolve()
 audio_tmp_dir.mkdir(parents=True, exist_ok=True)
 
 

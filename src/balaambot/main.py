@@ -54,7 +54,12 @@ def start() -> None:
     if BOT_TOKEN is None or BOT_TOKEN == "":
         msg = "DISCORD_BOT_TOKEN environment variable is not set."
         raise ValueError(msg)
-
+    if '"' in BOT_TOKEN:
+        msg = (
+            "DISCORD_BOT_TOKEN contains invalid characters. "
+            'Do not wrap the token in "..." inside the .env file!'
+        )
+        raise ValueError(msg)
     asyncio.run(load_extensions())
     logger.info("Starting bot...")
     bot.run(BOT_TOKEN)

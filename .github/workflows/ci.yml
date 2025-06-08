@@ -12,6 +12,10 @@ jobs:
   lint-build-test:
     name: Lint, Build, and Test
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.12", "3.13"]
+        uv-version: ["0.7.12", "latest"]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -21,10 +25,11 @@ jobs:
         with:
           dockerfile: Dockerfile
 
-      - name: Setup Python 3.13 with uv
+      - name: Setup Python ${{ matrix.python-version }} with uv ${{ matrix.uv-version }}
         uses: ./.github/actions/setup-python-with-uv
         with:
-          python-version: 3.13
+          python-version: ${{ matrix.python-version }}
+          uv-version: ${{ matrix.uv-version }}
 
       - name: Run Tests
         run: make test
@@ -34,6 +39,18 @@ jobs:
 
       - name: Upload coverage to Coveralls
         uses: coverallsapp/github-action@v2
+        with:
+          parallel: true
+          flag-name: py ${{ matrix.python-version }} - uv ${{ matrix.uv-version }}
+
+  finish:
+    needs: lint-build-test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Finish Coveralls
+        uses: coverallsapp/github-action@v2
+        with:
+          parallel-finished: true
 
   docker:
     name: Docker Build & Push

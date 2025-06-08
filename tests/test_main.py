@@ -52,6 +52,7 @@ async def test_load_extensions(monkeypatch):
 
     assert loaded == [
         "balaambot.bot_commands.bot_commands",
+        "balaambot.bot_commands.cat_commands",
         "balaambot.bot_commands.joke_commands",
         "balaambot.bot_commands.music_commands",
         "balaambot.bot_commands.sfx_commands",
