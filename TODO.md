@@ -2,6 +2,9 @@
 
 These are smaller jobs, that shouldn't take too long to knock down individually.
 
+- [ ] Separate and optimize CI pipelines
+  - [ ] Separate the build, lint and test pipelines
+  - [ ] Speed up docker builds using caching
 - [ ] Add a cronjob to remove cached audio files that are over a week old
 - [x] Optimise the docker containers
   - [x] Update the dockerfiles to pull the sounds zip and unpack it only during the running phase, rather than packing it into the built image
