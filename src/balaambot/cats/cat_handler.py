@@ -87,6 +87,42 @@ class CatHandler:
         self.db.guild_cats[guild_id][cat_id] = Cat(name=cat_name, owner=owner_id)
         self._save_cat_db(self.db)
 
+    def remove_cat(
+        self, cat_name: str, guild_id: int, user_id: int
+    ) -> tuple[bool, str]:
+        """Remove a cat if the user is the owner.
+
+        Args:
+            cat_name (str): The name of the cat to remove
+            guild_id (int): The Discord guild to remove from
+            user_id (int): The Discord user ID of the user requesting removal
+
+        Returns:
+            tuple[bool, str]: (success, message)
+
+        """
+        cat_id = self._get_cat_id(cat_name)
+        cats = self.db.guild_cats.get(guild_id, {})
+        cat_obj = cats.get(cat_id)
+        if not cat_obj:
+            return False, f"No cat named {cat_name} exists."
+        if cat_obj.owner != user_id:
+            return (
+                False,
+                f"You are not the owner of {cat_obj.name}. "
+                "Only the owner can remove this cat. :pouting_cat:",
+            )
+        del cats[cat_id]
+        self.db.guild_cats[guild_id] = cats
+        self._save_cat_db(self.db)
+        return (
+            True,
+            (
+                f"{cat_obj.name} has been removed from the server. "
+                "Goodbye! :crying_cat_face:"
+            ),
+        )
+
     def _get_cat_id(self, cat_name: str) -> str:
         return cat_name.strip().lower()
 

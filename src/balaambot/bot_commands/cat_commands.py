@@ -91,6 +91,24 @@ class CatCommands(commands.Cog):
             f"We currently have these cats:\n{cat_list}",
         )
 
+    @app_commands.command(
+        name="remove_cat", description="Remove a cat you own from the server."
+    )
+    @app_commands.describe(cat="The name of the cat to remove")
+    async def remove_cat(self, interaction: discord.Interaction, cat: str) -> None:
+        """Remove a cat, only if the user is the owner."""
+        logger.info(
+            "Received remove_cat command: %s (cat: %s, guild_id: %d)",
+            interaction.user,
+            cat,
+            interaction.guild_id,
+        )
+        guild_id = 0 if interaction.guild_id is None else interaction.guild_id
+        success, message = self.cat_handler.remove_cat(
+            cat, guild_id, interaction.user.id
+        )
+        await interaction.response.send_message(message)
+
 
 async def setup(bot: commands.Bot) -> None:
     """Load the CatCommands cog."""

@@ -152,3 +152,33 @@ def test_get_cat_returns_none_if_guild_missing(patch_save_file, patch_logger):
     # Use a guild_id that does not exist
     cat = handler.get_cat("anycat", 99999)
     assert cat is None
+
+def test_remove_cat_success(patch_save_file, patch_logger):
+    handler = CatHandler()
+    owner_id = 123
+    handler.add_cat("Whiskers", GUILD_ID, owner_id)
+    # Remove as owner
+    success, msg = handler.remove_cat("Whiskers", GUILD_ID, owner_id)
+    assert success is True
+    assert "removed" in msg
+    # Cat is gone
+    assert handler.get_cat("Whiskers", GUILD_ID) is None
+
+def test_remove_cat_not_owner(patch_save_file, patch_logger):
+    handler = CatHandler()
+    owner_id = 123
+    other_id = 456
+    handler.add_cat("Whiskers", GUILD_ID, owner_id)
+    # Try to remove as non-owner
+    success, msg = handler.remove_cat("Whiskers", GUILD_ID, other_id)
+    assert success is False
+    assert "not the owner" in msg
+    # Cat still exists
+    assert handler.get_cat("Whiskers", GUILD_ID) == "Whiskers"
+
+def test_remove_cat_not_exist(patch_save_file, patch_logger):
+    handler = CatHandler()
+    # Try to remove a cat that doesn't exist
+    success, msg = handler.remove_cat("Ghost", GUILD_ID, 123)
+    assert success is False
+    assert "No cat named Ghost exists" in msg
