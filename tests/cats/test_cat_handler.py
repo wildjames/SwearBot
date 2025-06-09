@@ -1,8 +1,10 @@
 import json
 import pytest
 import types
-from balaambot.cats.cat_handler import CatHandler, CatData
+from balaambot.cats.cat_handler import CatHandler
 from balaambot.cats import cat_handler
+
+GUILD_ID = 12345
 
 @pytest.fixture
 def patch_save_file(monkeypatch, tmp_path):
@@ -22,21 +24,20 @@ def patch_logger(monkeypatch):
 
 def test_init_no_file(patch_save_file, patch_logger):
     handler = CatHandler()
-    assert handler.db.cats == {}
-    assert handler.get_num_cats() == 0
+    assert handler.get_num_cats(GUILD_ID) == 0
 
 def test_init_with_valid_file(patch_save_file, patch_logger):
-    cats_data = {"cats": {"mittens": {"name": "Mittens"}}}
+    cats_data = {"guild_cats": {str(GUILD_ID): {"mittens": {"name": "Mittens"}}}}
     patch_save_file.write_text(json.dumps(cats_data))
     handler = CatHandler()
-    assert "mittens" in handler.db.cats
-    assert isinstance(handler.db.cats["mittens"], cat_handler.Cat)
-    assert handler.db.cats["mittens"].name == "Mittens"
+    assert "mittens" in handler.db.guild_cats.get(GUILD_ID, {})
+    cat_obj = handler.db.guild_cats[GUILD_ID]["mittens"]
+    assert isinstance(cat_obj, cat_handler.Cat)
+    assert cat_obj.name == "Mittens"
 
 def test_init_with_invalid_json(patch_save_file, patch_logger, monkeypatch):
     logged = {}
     def fake_exception(msg, *a, **k): logged["called"] = True
-    # Patch logger before creating the handler
     monkeypatch.setattr(cat_handler, "logger", types.SimpleNamespace(
         info=lambda *a, **k: None,
         exception=fake_exception,
@@ -47,54 +48,95 @@ def test_init_with_invalid_json(patch_save_file, patch_logger, monkeypatch):
 
 def test_add_cat_creates_and_persists(patch_save_file, patch_logger):
     handler = CatHandler()
-    handler.add_cat("Whiskers")
-    cat_obj = handler.db.cats.get("whiskers")
+    handler.add_cat("Whiskers", GUILD_ID)
+    cat_obj = handler.db.guild_cats[GUILD_ID].get("whiskers")
     assert isinstance(cat_obj, cat_handler.Cat)
     assert cat_obj.name == "Whiskers"
-    assert handler.get_cat("whiskers") == "Whiskers"
+    assert handler.get_cat("whiskers", GUILD_ID) == "Whiskers"
     # File should exist and contain the cat
     with patch_save_file.open() as f:
         data = json.load(f)
-    assert "cats" in data
-    assert "whiskers" in data["cats"]
-    assert data["cats"]["whiskers"]["name"] == "Whiskers"
+    assert "guild_cats" in data
+    assert str(GUILD_ID) in data["guild_cats"]
+    assert "whiskers" in data["guild_cats"][str(GUILD_ID)]
+    assert data["guild_cats"][str(GUILD_ID)]["whiskers"]["name"] == "Whiskers"
 
 def test_add_cat_normalizes_id(patch_save_file, patch_logger):
     handler = CatHandler()
-    handler.add_cat("  Fluffy  ")
+    handler.add_cat("  Fluffy  ", GUILD_ID)
     # All these should return the original name as stored
-    assert handler.get_cat("fluffy") == "  Fluffy  "
-    assert handler.get_cat("  FLUFFY") == "  Fluffy  "
-    assert handler.get_cat("FlUfFy") == "  Fluffy  "
-    assert handler.get_cat("other") is None
+    assert handler.get_cat("fluffy", GUILD_ID) == "  Fluffy  "
+    assert handler.get_cat("  FLUFFY", GUILD_ID) == "  Fluffy  "
+    assert handler.get_cat("FlUfFy", GUILD_ID) == "  Fluffy  "
+    assert handler.get_cat("other", GUILD_ID) is None
 
 def test_get_cat_names(patch_save_file, patch_logger):
     handler = CatHandler()
-    handler.add_cat("A")
-    handler.add_cat("B")
-    names = handler.get_cat_names()
+    handler.add_cat("A", GUILD_ID)
+    handler.add_cat("B", GUILD_ID)
+    names = handler.get_cat_names(GUILD_ID)
     assert "- A" in names
     assert "- B" in names
     assert names.count("- ") == 2
 
 def test_get_num_cats(patch_save_file, patch_logger):
     handler = CatHandler()
-    assert handler.get_num_cats() == 0
-    handler.add_cat("X")
-    handler.add_cat("Y")
-    assert handler.get_num_cats() == 2
+    assert handler.get_num_cats(GUILD_ID) == 0
+    handler.add_cat("X", GUILD_ID)
+    handler.add_cat("Y", GUILD_ID)
+    assert handler.get_num_cats(GUILD_ID) == 2
 
 def test_save_creates_file_if_missing(patch_save_file, patch_logger):
     handler = CatHandler()
-    handler.add_cat("Zed")
+    handler.add_cat("Zed", GUILD_ID)
     assert patch_save_file.exists()
     with patch_save_file.open() as f:
         data = json.load(f)
-    assert "cats" in data
-    assert "zed" in data["cats"]
-    assert data["cats"]["zed"]["name"] == "Zed"
+    assert "guild_cats" in data
+    assert str(GUILD_ID) in data["guild_cats"]
+    assert "zed" in data["guild_cats"][str(GUILD_ID)]
+    assert data["guild_cats"][str(GUILD_ID)]["zed"]["name"] == "Zed"
 
 def test_get_cat_id_normalization(patch_save_file, patch_logger):
     handler = CatHandler()
     assert handler._get_cat_id("  Foo  ") == "foo"
     assert handler._get_cat_id("BAR") == "bar"
+
+def test_cats_are_isolated_by_guild(patch_save_file, patch_logger):
+    handler = CatHandler()
+    guild1 = 111
+    guild2 = 222
+    handler.add_cat("Mittens", guild1)
+    handler.add_cat("Fluffy", guild2)
+    # Each guild only sees its own cats
+    assert handler.get_cat("Mittens", guild1) == "Mittens"
+    assert handler.get_cat("Fluffy", guild1) is None
+    assert handler.get_cat("Fluffy", guild2) == "Fluffy"
+    assert handler.get_cat("Mittens", guild2) is None
+    # Names list is correct per guild
+    assert "- Mittens" in handler.get_cat_names(guild1)
+    assert "- Fluffy" not in handler.get_cat_names(guild1)
+    assert "- Fluffy" in handler.get_cat_names(guild2)
+    assert "- Mittens" not in handler.get_cat_names(guild2)
+    # Counts are correct
+    assert handler.get_num_cats(guild1) == 1
+    assert handler.get_num_cats(guild2) == 1
+
+def test_guilds_are_persisted_separately(patch_save_file, patch_logger):
+    handler = CatHandler()
+    guild1 = 333
+    guild2 = 444
+    handler.add_cat("Tiger", guild1)
+    handler.add_cat("Shadow", guild2)
+    # Save and reload
+    handler2 = CatHandler()
+    assert handler2.get_cat("Tiger", guild1) == "Tiger"
+    assert handler2.get_cat("Shadow", guild2) == "Shadow"
+    assert handler2.get_cat("Tiger", guild2) is None
+    assert handler2.get_cat("Shadow", guild1) is None
+
+def test_get_cat_returns_none_if_guild_missing(patch_save_file, patch_logger):
+    handler = CatHandler()
+    # Use a guild_id that does not exist
+    cat = handler.get_cat("anycat", 99999)
+    assert cat is None

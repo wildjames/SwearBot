@@ -26,15 +26,21 @@ class CatCommands(commands.Cog):
     @app_commands.describe(cat="The name of the cat to adopt")
     async def adopt_cat(self, interaction: discord.Interaction, cat: str) -> None:
         """Creates and saves a new pet cat."""
-        logger.info("Received adopt_cat command: %s (cat: %s)", interaction.user, cat)
+        logger.info(
+            "Received adopt_cat command: %s (cat: %s, guild_id: %d)",
+            interaction.user,
+            cat,
+            interaction.guild_id,
+        )
+        guild_id = 0 if interaction.guild_id is None else interaction.guild_id
 
-        if self.cat_handler.get_cat(cat):
+        if self.cat_handler.get_cat(cat, guild_id):
             await interaction.response.send_message(
                 f"We already have a cat named {cat}!",
             )
             return
 
-        self.cat_handler.add_cat(cat)
+        self.cat_handler.add_cat(cat, guild_id)
         await interaction.response.send_message(
             f"You adopted a new cat called {cat}! :cat:"
         )
@@ -44,17 +50,21 @@ class CatCommands(commands.Cog):
     async def pet_cat(self, interaction: discord.Interaction, cat: str) -> None:
         """Try to pet a cat with a chance to fail."""
         logger.info(
-            "Received pet_cat command from: %s (cat: %s)", interaction.user, cat
+            "Received pet_cat command from: %s (cat: %s, guild_id: %d)",
+            interaction.user,
+            cat,
+            interaction.guild_id,
         )
-        if self.cat_handler.get_num_cats() == 0:
+        guild_id = 0 if interaction.guild_id is None else interaction.guild_id
+        if self.cat_handler.get_num_cats(guild_id) == 0:
             await interaction.response.send_message(MSG_NO_CAT)
             return
 
-        target_cat = self.cat_handler.get_cat(cat)
+        target_cat = self.cat_handler.get_cat(cat, guild_id)
         if target_cat is None:
             await interaction.response.send_message(
                 f"We don't have any cats named {cat}. "
-                f"We have these:\n{self.cat_handler.get_cat_names()}.",
+                f"We have these:\n{self.cat_handler.get_cat_names(guild_id)}.",
             )
             return
 
@@ -71,13 +81,14 @@ class CatCommands(commands.Cog):
     async def list_cats(self, interaction: discord.Interaction) -> None:
         """List all of the server's cats."""
         logger.info("Received list_cats command from: %s", interaction.user)
-
-        if self.cat_handler.get_num_cats() == 0:
+        guild_id = 0 if interaction.guild_id is None else interaction.guild_id
+        if self.cat_handler.get_num_cats(guild_id) == 0:
             await interaction.response.send_message(MSG_NO_CAT)
             return
 
+        cat_list = self.cat_handler.get_cat_names(guild_id)
         await interaction.response.send_message(
-            f"We currently have these cats:\n{self.cat_handler.get_cat_names()}",
+            f"We currently have these cats:\n{cat_list}",
         )
 
 
