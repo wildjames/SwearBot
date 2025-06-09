@@ -18,6 +18,7 @@ class Cat(pydantic.BaseModel):
     """Data representing a cat."""
 
     name: str
+    owner: int  # Discord user ID of the owner
 
 
 class CatData(pydantic.BaseModel):
@@ -64,24 +65,26 @@ class CatHandler:
         return cat.name if cat else None
 
     def get_cat_names(self, guild_id: int) -> str:
-        """Get a formatted list of cat names."""
+        """Get a formatted list of cat names and owners."""
         return "\n".join(
-            f"- {cat.name}" for cat in self.db.guild_cats.get(guild_id, {}).values()
+            f"- {cat.name} (Owner: <@{cat.owner}>)"
+            for cat in self.db.guild_cats.get(guild_id, {}).values()
         )
 
-    def add_cat(self, cat_name: str, guild_id: int) -> None:
+    def add_cat(self, cat_name: str, guild_id: int, owner_id: int) -> None:
         """Creates a new cat.
 
         Args:
             cat_name (str): The name of the cat to create
             guild_id (int): The Discord guild to create them in
+            owner_id (int): The Discord user ID of the owner
 
         """
         cat_id = self._get_cat_id(cat_name)
         # Make a new cat and save it
         if guild_id not in self.db.guild_cats:
             self.db.guild_cats[guild_id] = {}
-        self.db.guild_cats[guild_id][cat_id] = Cat(name=cat_name)
+        self.db.guild_cats[guild_id][cat_id] = Cat(name=cat_name, owner=owner_id)
         self._save_cat_db(self.db)
 
     def _get_cat_id(self, cat_name: str) -> str:

@@ -40,7 +40,7 @@ class CatCommands(commands.Cog):
             )
             return
 
-        self.cat_handler.add_cat(cat, guild_id)
+        self.cat_handler.add_cat(cat, guild_id, interaction.user.id)
         await interaction.response.send_message(
             f"You adopted a new cat called {cat}! :cat:"
         )
