@@ -36,13 +36,13 @@ class CatCommands(commands.Cog):
 
         if self.cat_handler.get_cat(cat, guild_id):
             await interaction.response.send_message(
-                f"We already have a cat named {cat}!",
+                f"We already have a cat named {cat}!", ephemeral=True
             )
             return
 
         self.cat_handler.add_cat(cat, guild_id, interaction.user.id)
         await interaction.response.send_message(
-            f"You adopted a new cat called {cat}! :cat:"
+            f"<@{interaction.user.id}> adopted a new cat called {cat}! :smile_cat:"
         )
 
     @app_commands.command(name="pet", description="Try to pet one of our cats!")
@@ -65,16 +65,20 @@ class CatCommands(commands.Cog):
             await interaction.response.send_message(
                 f"We don't have any cats named {cat}. "
                 f"We have these:\n{self.cat_handler.get_cat_names(guild_id)}.",
+                ephemeral=True,
             )
             return
 
         success = random.choices([True, False], [3, 1])  # noqa: S311
         if success[0]:
             msg = (
-                f"You successfully petted {target_cat}! They love it! :heart_eyes_cat:"
+                f"<@{interaction.user.id}> successfully petted {target_cat}! "
+                "They love it! :heart_eyes_cat:"
             )
         else:
-            msg = f"{target_cat} ran away before you could pet them!"
+            msg = (
+                f"{target_cat} ran away before <@{interaction.user.id}> could pet them!"
+            )
         await interaction.response.send_message(msg)
 
     @app_commands.command(name="list_cats", description="See all of our cats!")
@@ -83,12 +87,12 @@ class CatCommands(commands.Cog):
         logger.info("Received list_cats command from: %s", interaction.user)
         guild_id = 0 if interaction.guild_id is None else interaction.guild_id
         if self.cat_handler.get_num_cats(guild_id) == 0:
-            await interaction.response.send_message(MSG_NO_CAT)
+            await interaction.response.send_message(MSG_NO_CAT, ephemeral=True)
             return
 
         cat_list = self.cat_handler.get_cat_names(guild_id)
         await interaction.response.send_message(
-            f"We currently have these cats:\n{cat_list}",
+            f"We currently have these cats:\n{cat_list}"
         )
 
     @app_commands.command(
