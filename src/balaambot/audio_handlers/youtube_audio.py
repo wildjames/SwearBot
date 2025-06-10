@@ -1,46 +1,21 @@
 import asyncio
-import atexit
 import logging
-import re
-import shutil
-import time
-import urllib.parse
 from pathlib import Path
 from typing import Any, TypedDict, cast
 
 from yt_dlp import DownloadError, YoutubeDL  # type: ignore[import]
 
-import balaambot.config
+from balaambot import utils
+from balaambot.audio_handlers.youtube_utils import (
+    DEFAULT_CHANNELS,
+    DEFAULT_SAMPLE_RATE,
+    check_is_playlist,
+    get_cache_path,
+    get_temp_paths,
+    is_valid_youtube_url,
+)
 
 logger = logging.getLogger(__name__)
-
-DEFAULT_SAMPLE_RATE = 48000  # Default sample rate for PCM audio
-DEFAULT_CHANNELS = 2  # Default number of audio channels (stereo)
-
-AUDIO_CACHE_ROOT = Path(balaambot.config.PERSISTENT_DATA_DIR) / "audio_cache"
-
-logger.info(
-    "Using a sample rate of %dHz with %d channels",
-    DEFAULT_SAMPLE_RATE,
-    DEFAULT_CHANNELS,
-)
-logger.info("Using audio download and caching directory: '%s'", AUDIO_CACHE_ROOT)
-
-# Directory for caching PCM audio files
-audio_cache_dir = (AUDIO_CACHE_ROOT / "cached").resolve()
-audio_cache_dir.mkdir(parents=True, exist_ok=True)
-
-# Temporary directory for in-progress downloads
-audio_tmp_dir = (AUDIO_CACHE_ROOT / "downloading").resolve()
-audio_tmp_dir.mkdir(parents=True, exist_ok=True)
-
-
-# Cleanup temp directory on exit
-def _cleanup_tmp() -> None:
-    shutil.rmtree(audio_tmp_dir, ignore_errors=True)
-
-
-atexit.register(_cleanup_tmp)
 
 
 # Dictionary to store video metadata by URL
@@ -58,103 +33,6 @@ _video_metadata: dict[str, VideoMetadata] = {}
 
 # Locks to prevent multiple simultaneous downloads of the same URL
 _download_locks: dict[str, asyncio.Lock] = {}
-
-# Regex to extract YouTube video ID
-_YT_ID_RE = re.compile(
-    r"""
-    ^(?:https?://)?                     # optional scheme
-    (?:(?:www|music)\.)?                # optional www. or music.
-    (?:                                 # host + path alternatives:
-        youtube\.com/
-        (?:
-            watch\?(?:.*&)?v=
-            |embed/
-            |shorts/
-        )
-      |youtu\.be/                       # optional short URL
-    )
-    (?P<id>[A-Za-z0-9_-]{11})           # the 11-char video ID
-    .*                                  # Any extra query parameters
-    """,
-    re.VERBOSE,
-)
-_VALID_YT_URL_RE = re.compile(
-    r"""
-    ^(?:https?://)?                     # optional scheme
-    (?:(?:www|music)\.)?                # optional www. or music.
-    (?:                                 # host + path alternatives:
-        youtube\.com/
-        (?:
-            watch\?(?:.*&)?v=
-            |embed/
-            |shorts/
-            |playlist/
-        )
-      |youtu\.be/                       # optional short URL
-    )
-    [A-Za-z0-9_-]{11}                   # the 11-char video ID
-    .*                                  # Any extra query parameters
-    """,
-    re.VERBOSE,
-)
-_VALID_YT_PLAYLIST_URL = re.compile(
-    r"""
-    ^(?:https?://)?                    # optional scheme
-    (?:(?:www|music)\.)?               # optional www. or music.
-    (?:
-        youtube\.com/
-        (?:
-            playlist\?list=           #   /playlist?list=ID
-          | watch\?(?:.*&)?list=      #   /watch?...&list=ID
-          | embed/videoseries\?list=  #   /embed/videoseries?list=ID
-        )
-      | youtu\.be/[A-Za-z0-9_-]{11}\? #   youtu.be/VIDEO_ID?
-        (?:.*&)?list=                 #   ...&list=ID
-    )
-    (?P<playlist_id>[A-Za-z0-9_-]+)    # capture the playlist ID
-    (?:[&?].*)?                        # optional extra params
-    $
-    """,
-    re.VERBOSE,
-)
-
-
-def sec_to_string(val: float) -> str:
-    """Convert a number of seconds to a human-readable string, (HH:)MM:SS."""
-    sec_in_hour = 60 * 60
-    d = ""
-    if val >= sec_in_hour:
-        d += f"{int(val // sec_in_hour):02d}:"
-        val = val % sec_in_hour
-    d += f"{int(val // 60):02d}:{int(val % 60):02d}"
-    return d
-
-
-def is_valid_youtube_url(url: str) -> bool:
-    """Check if a URL is a valid YouTube video URL."""
-    return _VALID_YT_URL_RE.match(url) is not None
-
-
-def _get_video_id(url: str) -> str | None:
-    """Extract the video ID from a YouTube URL."""
-    match = _YT_ID_RE.match(url)
-    return match.group("id") if match else None
-
-
-def _get_cache_path(url: str, sample_rate: int, channels: int) -> Path:
-    """Compute the cache file path for a URL and audio parameters."""
-    vid = _get_video_id(url)
-    base = vid or url.replace("/", "_")
-    filename = f"{base}_{sample_rate}Hz_{channels}ch.pcm"
-    return audio_cache_dir / filename
-
-
-def _get_temp_paths(url: str) -> tuple[Path, Path]:
-    vid = _get_video_id(url)
-    base = vid or url.replace("/", "_")
-    opus_tmp = audio_tmp_dir / f"{base}.opus.part"
-    pcm_tmp = audio_tmp_dir / f"{base}.pcm.part"
-    return opus_tmp, pcm_tmp
 
 
 async def get_youtube_track_metadata(url: str) -> VideoMetadata | None:
@@ -191,21 +69,12 @@ async def get_youtube_track_metadata(url: str) -> VideoMetadata | None:
     title = cast("str", info.get("title")) or url  # type: ignore[no-typing]
     duration_s = cast("int", info.get("duration")) or 0  # type: ignore[no-typing]
 
-    # format runtime as H:MM:SS or M:SS
-    runtime = time.strftime("%H:%M:%S", time.gmtime(duration_s))
-    # strip leading "00:" for videos under an hour
-    runtime = runtime.removeprefix("00:")
-
-    runtime_str = (
-        f"{duration_s // 3600:02}:{(duration_s % 3600) // 60:02}:{duration_s % 60:02}"
-    )
-
     # cache and return
     _video_metadata[url] = VideoMetadata(
         url=url,
         title=title,
         runtime=duration_s,
-        runtime_str=runtime_str,
+        runtime_str=utils.sec_to_string(duration_s),
     )
     logger.debug("Cached metadata for %s: %s", url, _video_metadata[url])
     return _video_metadata[url]
@@ -219,7 +88,7 @@ async def fetch_audio_pcm(
     password: str | None = None,
 ) -> Path:
     """Audio fetching. Cache check, download via yt-dlp, then convert to PCM."""
-    cache_path = _get_cache_path(url, sample_rate, channels)
+    cache_path = get_cache_path(url, sample_rate, channels)
     if cache_path.exists():
         return cache_path
 
@@ -232,7 +101,7 @@ async def fetch_audio_pcm(
         if cache_path.exists():
             return cache_path
 
-        opus_tmp, pcm_tmp = _get_temp_paths(url)
+        opus_tmp, pcm_tmp = get_temp_paths(url)
 
         promises = [  # type: ignore[no-typing]
             _download_opus(url, opus_tmp),
@@ -321,51 +190,6 @@ async def _convert_opus_to_pcm(
         raise RuntimeError(msg)
 
     pcm_tmp.replace(cache_path)
-
-
-def get_audio_pcm(
-    url: str, sample_rate: int = DEFAULT_SAMPLE_RATE, channels: int = DEFAULT_CHANNELS
-) -> bytearray | None:
-    """Retrieve PCM audio data for a previously fetched URL."""
-    path = _get_cache_path(url, sample_rate, channels)
-    if not path.exists():
-        logger.error("No cached audio for URL: %s", url)
-        return None
-    data = path.read_bytes()
-    return bytearray(data)
-
-
-def remove_audio_pcm(
-    url: str, sample_rate: int = DEFAULT_SAMPLE_RATE, channels: int = DEFAULT_CHANNELS
-) -> bool:
-    """Remove cached PCM audio for a URL."""
-    path = _get_cache_path(url, sample_rate, channels)
-    if path.exists():
-        path.unlink()
-        logger.info("Removed cached audio for %s", url)
-        return True
-    logger.warning("Attempted to remove non-existent cache for %s", url)
-    return False
-
-
-def is_valid_youtube_playlist(url: str) -> bool:
-    """Check if a URL is a valid YouTube playlist URL."""
-    return _VALID_YT_PLAYLIST_URL.match(url) is not None
-
-
-def check_is_playlist(url: str) -> bool:
-    """Check if the given url is a playlist by looking for the 'link' parameter.
-
-    Returns True if a non-empty 'list' query parameter is present.
-    """
-    if not is_valid_youtube_playlist(url):
-        return False
-
-    parsed = urllib.parse.urlparse(url)
-    params = urllib.parse.parse_qs(parsed.query)
-
-    # 'list' will be a key if there's a playlist ID in the URL
-    return bool(params.get("list", False))
 
 
 async def get_playlist_video_urls(playlist_url: str) -> list[str]:

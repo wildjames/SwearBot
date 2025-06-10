@@ -2,17 +2,22 @@
 
 These are smaller jobs, that shouldn't take too long to knock down individually.
 
-- [ ] Separate and optimize CI pipelines
-  - [ ] Separate the build, lint and test pipelines
-  - [ ] Speed up docker builds using caching
 - [ ] Add a cronjob to remove cached audio files that are over a week old
+- [ ] check user is in voice channel before searching for tracks
+- [ ] too many sounds in the zip. /list_sfx gives an error because it hits the message limit
+- [ ] check if sfx file exists before running it and joining channel
+- [ ] sanitize sfx file names and find files with similar names
+- [ ] Bots should be segregated into their own dev channels on the dev server
+- [x] The `youtube_audio` script is getting too large, and has a lot of metadata stuff in it. Split it into `youtube_utils.py` and `youtube_audio.py`.
+- [x] Separate and optimize CI pipelines
+  - [x] Separate the build, lint and test pipelines
+  - [x] Speed up docker builds using caching
 - [x] Optimise the docker containers
   - [x] Update the dockerfiles to pull the sounds zip and unpack it only during the running phase, rather than packing it into the built image
   - [x] Deployment docker container doesnt use a builder phase
   - [x] devcontainer seems to take a long time to rebuild even with the cache.
   - [x] The audio cache should be in a volume rather than stored in the container, so it can be preserved across builds.
-- [ ] We should normalise the volume for tracks.
-- [ ] The `youtube_audio` script is getting too large, and has a lot of metadata stuff in it. Split it into `youtube_metadata.py` and `youtube_audio.py`.
+- [x] We should normalise the volume for tracks.
 - [x] The bot shouldn't rely on a cache mapping of urls to file paths. Instead, just search the file path since they're deterministic.
 - [x] When downloading youtube audio, download to `/tmp` and only move the completed file in to the audio cache when it's ready. Also, don't start a new download job for a file which is in progress. When the bot exits, cleanup should purge that directory!
 - [x] Only build and push the docker image if the tests pass
@@ -23,7 +28,7 @@ These are smaller jobs, that shouldn't take too long to knock down individually.
 
 These are things that will likely take over an hour
 
-- [ ] Multiple people sending commands at once seems to not work - test
+- [ ] Some things are not async enough, it seems. Downloading videos can cause playback to stutter. Break out the downloading logic to multithreading/processing?
 - [ ] Youtube age restricts some content, so I need to implement auth
 - [ ] Commands need to have guard clauses abstracted out into some discord utility functions
 - [ ] Add a way to scrub the currently playing track?

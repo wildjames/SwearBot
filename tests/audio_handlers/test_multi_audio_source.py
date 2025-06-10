@@ -1,6 +1,7 @@
 # type: ignore
 import array
 import shutil
+from uuid import uuid4
 import subprocess
 
 import pytest
@@ -12,6 +13,7 @@ from balaambot.audio_handlers.multi_audio_source import (
     ensure_mixer,
 )
 
+# TODO: Write tests for the audio normalisation
 
 def test_is_opus_returns_false():
     src = MultiAudioSource()
@@ -24,8 +26,8 @@ def test_mix_samples_combines_and_clears_tracks():
     # Use small chunk size for testing (8 bytes -> 4 samples)
     src.CHUNK_SIZE = 8
     # Prepare tracks with after_play key for TypedDict
-    track1 = {"samples": array.array("h", [1, 1, 1, 1]), "pos": 0, "after_play": None}
-    track2 = {"samples": array.array("h", [2, 2, 2, 2]), "pos": 0, "after_play": None}
+    track1 = {"name": "name1", "id": uuid4(), "samples": array.array("h", [1, -1, 1, -1]), "pos": 0, "after_play": None}
+    track2 = {"name": "name2", "id": uuid4(), "samples": array.array("h", [2, -2, 2, -2]), "pos": 0, "after_play": None}
     # Assign tracks
     src._tracks = [track1, track2]
     src._sfx = []
@@ -35,7 +37,7 @@ def test_mix_samples_combines_and_clears_tracks():
     # The sum needs to be an int32 array
     assert isinstance(total, array.array)
     assert total.typecode == "i"
-    assert list(total) == [3, 3, 3, 3]
+    assert list(total) == [3, -3, 3, -3]
 
     # Both tracks reached end, so internal _tracks and _sfx should be empty
     assert src._tracks == []
@@ -53,6 +55,7 @@ def test_read_clips_and_respects_stopped(monkeypatch):
     src._mix_samples = fake_mix
     src.MAX_VOLUME = 10
     src.MIN_VOLUME = -10
+    src._stopped = False
 
     # Test normal read with clipping
     data = src.read()
@@ -270,7 +273,7 @@ def test_mix_samples_with_callback_and_padding():
     def cb():
         called.append(True)
 
-    track = {"samples": samples, "pos": 0, "after_play": cb}
+    track = {"name": "name", "id": uuid4(), "samples": samples, "pos": 0, "after_play": cb}
     src._tracks = [track]
     src._sfx = []
 
