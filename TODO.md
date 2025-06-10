@@ -3,12 +3,12 @@
 These are smaller jobs, that shouldn't take too long to knock down individually.
 
 - [ ] Add a cronjob to remove cached audio files that are over a week old
-- [ ] The `youtube_audio` script is getting too large, and has a lot of metadata stuff in it. Split it into `youtube_metadata.py` and `youtube_audio.py`.
 - [ ] check user is in voice channel before searching for tracks
 - [ ] too many sounds in the zip. /list_sfx gives an error because it hits the message limit
 - [ ] check if sfx file exists before running it and joining channel
 - [ ] sanitize sfx file names and find files with similar names
 - [ ] Bots should be segregated into their own dev channels on the dev server
+- [x] The `youtube_audio` script is getting too large, and has a lot of metadata stuff in it. Split it into `youtube_utils.py` and `youtube_audio.py`.
 - [x] Separate and optimize CI pipelines
   - [x] Separate the build, lint and test pipelines
   - [x] Speed up docker builds using caching
