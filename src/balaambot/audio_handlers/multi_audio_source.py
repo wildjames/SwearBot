@@ -79,9 +79,12 @@ class MultiAudioSource(AudioSource):
         self._tracks: list[Track] = []
         self._sfx: list[Track] = []
         self._stopped = False
+        self.normalise_audio = False
 
     def is_opus(self) -> bool:
         """Indicate that output data is raw PCM, not Opus-encoded.
+
+        TODO: We should probably have an option to return Opus.
 
         Returns:
             False always, since this source provides raw PCM bytes.
