@@ -3,6 +3,7 @@
 These are smaller jobs, that shouldn't take too long to knock down individually.
 
 - [ ] Add a cronjob to remove cached audio files that are over a week old
+- [ ] When the bot sends a message with a youtube video in it, it should contain a link to the video
 - [ ] check user is in voice channel before searching for tracks
 - [ ] too many sounds in the zip. /list_sfx gives an error because it hits the message limit
 - [ ] check if sfx file exists before running it and joining channel
