@@ -82,9 +82,8 @@ class MultiAudioSource(AudioSource):
     TARGET_VOLUME: float = 0.997
     # "max" or "std_dev"
     NORMALISATION_APPROACH = "std_dev"
-    normalise_audio: bool = True
 
-    def __init__(self) -> None:
+    def __init__(self, *, normalise_audio: bool = False) -> None:
         """Initialize the mixer, setting up track storage and synchronization."""
         self._lock = threading.Lock()
 
@@ -95,6 +94,7 @@ class MultiAudioSource(AudioSource):
 
         # use track id as the hash key
         self._track_norm_factors: dict[uuid.UUID, float] = {}
+        self.normalise_audio = normalise_audio
 
     def is_opus(self) -> bool:
         """Indicate that output data is raw PCM, not Opus-encoded.
@@ -238,10 +238,11 @@ class MultiAudioSource(AudioSource):
                 pad = array.array("h", [0] * (end - len(samples)))
                 samples.extend(pad)
 
+            norm_factor = 1
+            if self.normalise_audio and track["id"] in self._track_norm_factors:
+                norm_factor = self._track_norm_factors[track["id"]]
+
             chunk = samples[pos:end]
-            norm_factor = (
-                self._track_norm_factors[track["id"]] if self.normalise_audio else 1
-            )
             for i, s in enumerate(chunk):
                 # TODO: When the norm factor is a float, this is ~5x slower than for int
                 total[i] += (
@@ -259,7 +260,7 @@ class MultiAudioSource(AudioSource):
                     except Exception:
                         logger.exception("Error in after_play callback")
                 # Clean up the normalisation factors dictionary.
-                self._track_norm_factors.pop(track["id"])
+                self._track_norm_factors.pop(track["id"], None)
             else:
                 if track in self._tracks:
                     new_tracks.append(track)
