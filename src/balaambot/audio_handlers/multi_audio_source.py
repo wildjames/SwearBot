@@ -11,10 +11,8 @@ from typing import TypedDict
 
 from discord import AudioSource, VoiceClient
 
-from balaambot.audio_handlers.youtube_audio import (
-    fetch_audio_pcm,
-    get_audio_pcm,
-)
+from balaambot.audio_handlers.youtube_audio import fetch_audio_pcm
+from balaambot.audio_handlers.youtube_utils import get_audio_pcm
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +76,9 @@ class MultiAudioSource(AudioSource):
     MAX_VOLUME = 32767
 
     # Audio normalisation
+    # The intent here is to make loud and quiet tracks somewhat more consistent,
+    # so that users don't either miss a track or get jumped by a loud one. This is
+    # not intended to be any kind of improvement on perceived quality!
     TARGET_VOLUME: float = 0.997
     # "max" or "std_dev"
     NORMALISATION_APPROACH = "std_dev"

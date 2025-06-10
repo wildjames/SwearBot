@@ -3,11 +3,13 @@ import logging
 
 from balaambot.audio_handlers.youtube_audio import (
     fetch_audio_pcm,
-    get_audio_pcm,
     get_playlist_video_urls,
     get_youtube_track_metadata,
-    remove_audio_pcm,
     search_youtube,
+)
+from balaambot.audio_handlers.youtube_utils import (
+    remove_audio_pcm,
+    get_audio_pcm,
 )
 
 logger = logging.getLogger(__name__)
