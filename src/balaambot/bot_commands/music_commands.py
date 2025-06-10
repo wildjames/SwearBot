@@ -321,8 +321,9 @@ class MusicCommands(commands.Cog):
     @app_commands.command(name="skip", description="Skip the current YouTube track")
     async def skip(self, interaction: discord.Interaction) -> None:
         """Stop current track and play next in queue."""
+        await interaction.response.defer(ephemeral=True, thinking=True)
         if interaction.guild is None:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "This command only works in a server.", ephemeral=True
             )
             return
@@ -332,7 +333,7 @@ class MusicCommands(commands.Cog):
             or not member.voice
             or not isinstance(member.voice.channel, discord.VoiceChannel)
         ):
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "You need to be in a standard voice channel to skip audio.",
                 ephemeral=True,
             )
@@ -346,19 +347,19 @@ class MusicCommands(commands.Cog):
 
         track_url = youtube_jobs.get_current_track(vc)
         if not track_url:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "No track is currently playing.", ephemeral=True
             )
             return
 
         track_meta = await youtube_audio.get_youtube_track_metadata(track_url)
         if track_meta is None:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 f"Failed to fetch track metadata. Please check the URL. [{track_url}]",
                 ephemeral=True,
             )
             return
-        await interaction.response.send_message(
+        await interaction.followup.send(
             f"⏭️    Skipped to next track: {track_meta['title']}",
             ephemeral=False,
         )
