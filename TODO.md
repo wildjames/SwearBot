@@ -31,7 +31,7 @@ These are things that will likely take over an hour
 - [ ] Add a way to scrub the currently playing track?
 - [ ] Send a message when a new track starts to play
 - [ ] Separate and optimize CI pipelines more
-  - [ ] Separate the CI pipeline and use the dedicated pipelines instead
+  - [x] Separate the CI pipeline and use the dedicated pipelines instead
   - [ ] Speed up docker builds - make sure caching is working properly
 - [x] Allow users to search youtube for videos
 - [x] Youtube playlist support
