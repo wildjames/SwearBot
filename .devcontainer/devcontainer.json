@@ -1,11 +1,12 @@
 {
-    "name": "uv",
+    "name": "Balaam Bot",
     "build": {
         "context": "..",
         "dockerfile": "Dockerfile",
         "args": {
             "UV_VERSION": "latest",
             "DEBIAN_VERSION": "bookworm"
+            // Python version determined by .python-version file
         }
     },
     "mounts": [
