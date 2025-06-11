@@ -1,5 +1,4 @@
-# TODO see if this can be used to run tests and coverage in a dedicated flow
-name: Test
+name: Tests and Coverage
 
 on:
   push:
@@ -8,7 +7,8 @@ on:
     branches: [main]
 
 jobs:
-  coverage:
+  test:
+    name: Run Python Tests
     runs-on: ubuntu-latest
 
     strategy:
@@ -26,5 +26,20 @@ jobs:
           python-version: ${{ matrix.python-version }}
           uv-version: ${{ matrix.uv-version }}
 
-      - name: Run tests
+      - name: Run Tests
         run: make test
+
+      - name: Upload coverage to Coveralls
+        uses: coverallsapp/github-action@v2
+        with:
+          parallel: true
+          flag-name: py ${{ matrix.python-version }} - uv ${{ matrix.uv-version }}
+
+  finish:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Finish Coveralls
+        uses: coverallsapp/github-action@v2
+        with:
+          parallel-finished: true
