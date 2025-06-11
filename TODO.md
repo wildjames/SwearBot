@@ -10,9 +10,6 @@ These are smaller jobs, that shouldn't take too long to knock down individually.
 - [ ] sanitize sfx file names and find files with similar names
 - [ ] Bots should be segregated into their own dev channels on the dev server
 - [x] The `youtube_audio` script is getting too large, and has a lot of metadata stuff in it. Split it into `youtube_utils.py` and `youtube_audio.py`.
-- [x] Separate and optimize CI pipelines
-  - [x] Separate the build, lint and test pipelines
-  - [x] Speed up docker builds using caching
 - [x] Optimise the docker containers
   - [x] Update the dockerfiles to pull the sounds zip and unpack it only during the running phase, rather than packing it into the built image
   - [x] Deployment docker container doesnt use a builder phase
@@ -24,7 +21,6 @@ These are smaller jobs, that shouldn't take too long to knock down individually.
 - [x] Only build and push the docker image if the tests pass
 - [x] Report playback duration in the queue list command. Add a method to the audio mixer class to do that.
 - [x] If the play command doesnt get a valid youtube url, reject it and inform the user.
-
 # Mid-term TODO list
 
 These are things that will likely take over an hour
@@ -34,6 +30,9 @@ These are things that will likely take over an hour
 - [ ] Commands need to have guard clauses abstracted out into some discord utility functions
 - [ ] Add a way to scrub the currently playing track?
 - [ ] Send a message when a new track starts to play
+- [ ] Separate and optimize CI pipelines more
+  - [ ] Separate the CI pipeline and use the dedicated pipelines instead
+  - [ ] Speed up docker builds - make sure caching is working properly
 - [x] Allow users to search youtube for videos
 - [x] Youtube playlist support
 - [x] Test coverage is abysmal. Expand to cover all the stuff I've done since I last did a push on tests.
