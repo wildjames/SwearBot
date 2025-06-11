@@ -60,7 +60,7 @@ jobs:
           context: .
           file: Dockerfile
           tags: ${{ secrets.DOCKER_HUB_USERNAME }}/balaambot:latest
-          push: true
+          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -91,6 +91,8 @@ jobs:
           context: .
           file: .devcontainer/Dockerfile
           tags: ${{ secrets.DOCKER_HUB_USERNAME }}/balaambot-devcontainer:latest
+          # TODO? push devcontainers with:
+          # push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
           push: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
