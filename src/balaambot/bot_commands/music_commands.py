@@ -8,17 +8,14 @@ from discord import Client, InteractionCallbackResponse, app_commands
 from discord.ext import commands
 from discord.ui import Button, View
 
-from balaambot import discord_utils
-from balaambot.audio_handlers import youtube_audio
+from balaambot import discord_utils, utils
+from balaambot.audio_handlers import youtube_audio, youtube_utils
 from balaambot.schedulers import youtube_jobs
 
 if TYPE_CHECKING:
     from pathlib import Path
 
 logger = logging.getLogger(__name__)
-
-# TODOs:
-# check user is in voice channel before searching for tracks
 
 
 class SearchView(View):
@@ -88,13 +85,13 @@ class MusicCommands(commands.Cog):
         query = query.strip()
 
         # Handle playlist URLs
-        if youtube_audio.is_valid_youtube_playlist(query):
+        if youtube_utils.is_valid_youtube_playlist(query):
             logger.info("Received play command for playlist URL: '%s'", query)
             self.bot.loop.create_task(self.do_play_playlist(interaction, query))
             return
 
         # Handle youtube videos
-        if youtube_audio.is_valid_youtube_url(query):
+        if youtube_utils.is_valid_youtube_url(query):
             logger.info("Received play command for URL: '%s'", query)
             self.bot.loop.create_task(self.do_play(interaction, query))
             return
@@ -130,7 +127,7 @@ class MusicCommands(commands.Cog):
         # Build a text block describing each result line by line
         lines: list[str] = []
         for idx, (_, title, duration_secs) in enumerate(results):
-            duration_str = youtube_audio.sec_to_string(duration_secs)
+            duration_str = utils.sec_to_string(duration_secs)
             lines.append(f"**{idx + 1}.** {title} ({duration_str})")
 
         description = (
@@ -313,7 +310,7 @@ class MusicCommands(commands.Cog):
             msg = "**Upcoming tracks:**\n" + "\n".join(lines)
 
             # format runtime as H:MM:SS or M:SS
-            total_runtime_str = youtube_audio.sec_to_string(total_runtime)
+            total_runtime_str = utils.sec_to_string(total_runtime)
             msg += f"\n\n🔮    Total runtime: {total_runtime_str}"
 
         await interaction.followup.send(msg, ephemeral=True)
@@ -321,8 +318,9 @@ class MusicCommands(commands.Cog):
     @app_commands.command(name="skip", description="Skip the current YouTube track")
     async def skip(self, interaction: discord.Interaction) -> None:
         """Stop current track and play next in queue."""
+        await interaction.response.defer(ephemeral=True, thinking=True)
         if interaction.guild is None:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "This command only works in a server.", ephemeral=True
             )
             return
@@ -332,7 +330,7 @@ class MusicCommands(commands.Cog):
             or not member.voice
             or not isinstance(member.voice.channel, discord.VoiceChannel)
         ):
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "You need to be in a standard voice channel to skip audio.",
                 ephemeral=True,
             )
@@ -346,19 +344,19 @@ class MusicCommands(commands.Cog):
 
         track_url = youtube_jobs.get_current_track(vc)
         if not track_url:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "No track is currently playing.", ephemeral=True
             )
             return
 
         track_meta = await youtube_audio.get_youtube_track_metadata(track_url)
         if track_meta is None:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 f"Failed to fetch track metadata. Please check the URL. [{track_url}]",
                 ephemeral=True,
             )
             return
-        await interaction.response.send_message(
+        await interaction.followup.send(
             f"⏭️    Skipped to next track: {track_meta['title']}",
             ephemeral=False,
         )

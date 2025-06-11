@@ -3,16 +3,16 @@ import logging
 import shutil
 import subprocess
 import threading
+import uuid
 from collections.abc import Callable
+from math import sqrt
 from pathlib import Path
 from typing import TypedDict
 
 from discord import AudioSource, VoiceClient
 
-from balaambot.audio_handlers.youtube_audio import (
-    fetch_audio_pcm,
-    get_audio_pcm,
-)
+from balaambot.audio_handlers.youtube_audio import fetch_audio_pcm
+from balaambot.audio_handlers.youtube_utils import get_audio_pcm
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +53,8 @@ class Track(TypedDict):
 
     """
 
+    id: uuid.UUID
+    name: str
     samples: array.array[int]
     pos: int
     after_play: Callable[[], None] | None
@@ -73,15 +75,31 @@ class MultiAudioSource(AudioSource):
     MIN_VOLUME = -32768
     MAX_VOLUME = 32767
 
-    def __init__(self) -> None:
+    # Audio normalisation
+    # The intent here is to make loud and quiet tracks somewhat more consistent,
+    # so that users don't either miss a track or get jumped by a loud one. This is
+    # not intended to be any kind of improvement on perceived quality!
+    TARGET_VOLUME: float = 0.997
+    # "max" or "std_dev"
+    NORMALISATION_APPROACH = "std_dev"
+
+    def __init__(self, *, normalise_audio: bool = False) -> None:
         """Initialize the mixer, setting up track storage and synchronization."""
         self._lock = threading.Lock()
+
         self._tracks: list[Track] = []
         self._sfx: list[Track] = []
-        self._stopped = False
+
+        self._stopped = True
+
+        # use track id as the hash key
+        self._track_norm_factors: dict[uuid.UUID, float] = {}
+        self.normalise_audio = normalise_audio
 
     def is_opus(self) -> bool:
         """Indicate that output data is raw PCM, not Opus-encoded.
+
+        TODO: We should probably have an option to return Opus.
 
         Returns:
             False always, since this source provides raw PCM bytes.
@@ -155,6 +173,47 @@ class MultiAudioSource(AudioSource):
         with self._lock:
             self._stopped = True
 
+    def _compute_normalisation_factor(self, track: Track) -> None:
+        """Compute and store the normalisation factor for a track.
+
+        The normalisation factor is the multiplication factor required to bring it
+        to the desired average volume. Stores the factor in the internal
+        _track_norm_factors dictionary
+
+        There are some options for normalisation type:
+        - "max" will scale the track so that the max volume is the target value.
+        - "std_dev" will scale it so that the 3 sigma amplitude is the target volume.
+
+        Arguments:
+                   track: The track to compute
+
+        """
+        factor = 1.0
+        if self.NORMALISATION_APPROACH == "max":
+            # Values can be positive or negative, so look at the abs
+            factor = max([abs(s) for s in track["samples"]])
+
+        if self.NORMALISATION_APPROACH == "std_dev":
+            mean_sample = sum(track["samples"]) / len(track["samples"])
+            mu = sum([(s - mean_sample) ** 2 for s in track["samples"]])
+            std_dev = sqrt(mu / len(track["samples"]))
+            factor = 3 * std_dev
+
+        factor = self.TARGET_VOLUME * self.MAX_VOLUME / factor
+
+        self._track_norm_factors[track["id"]] = factor
+        logger.info(
+            (
+                "pre-computed a volume normalisation factor for track '%s': %.3f."
+                " Max amplitude was %d."
+                " Max amplitude will now be %d."
+            ),
+            track["name"],
+            factor,
+            max(track["samples"]),
+            max([int(s * factor) for s in track["samples"]]),
+        )
+
     def _mix_samples(self) -> array.array[int]:
         """Combine PCM data from all active tracks and sound effects.
 
@@ -179,9 +238,17 @@ class MultiAudioSource(AudioSource):
                 pad = array.array("h", [0] * (end - len(samples)))
                 samples.extend(pad)
 
+            norm_factor = 1
+            if self.normalise_audio and track["id"] in self._track_norm_factors:
+                norm_factor = self._track_norm_factors[track["id"]]
+
             chunk = samples[pos:end]
             for i, s in enumerate(chunk):
-                total[i] += s
+                # TODO: When the norm factor is a float, this is ~5x slower than for int
+                total[i] += (
+                    # Clamp to within MIN and MAX
+                    max(self.MIN_VOLUME, min(int(s * norm_factor), self.MAX_VOLUME))
+                )
             track["pos"] = end
 
             if end >= len(samples):
@@ -192,6 +259,8 @@ class MultiAudioSource(AudioSource):
                         callback()
                     except Exception:
                         logger.exception("Error in after_play callback")
+                # Clean up the normalisation factors dictionary.
+                self._track_norm_factors.pop(track["id"], None)
             else:
                 if track in self._tracks:
                     new_tracks.append(track)
@@ -291,9 +360,15 @@ class MultiAudioSource(AudioSource):
         samples.frombytes(pcm)
 
         with self._lock:
-            self._tracks.append(
-                {"samples": samples, "pos": 0, "after_play": after_play}
+            track = Track(
+                id=uuid.uuid4(),
+                name=url,
+                samples=samples,
+                pos=0,
+                after_play=after_play,
             )
+            self._compute_normalisation_factor(track)
+            self._tracks.append(track)
 
         logger.info("Loaded data for URL: %s", url)
         logger.info("Now %d tracks in mixer", len(self._tracks))
@@ -355,7 +430,14 @@ class MultiAudioSource(AudioSource):
         samples.frombytes(pcm_data)
 
         with self._lock:
-            self._sfx.append({"samples": samples, "pos": 0, "after_play": after_play})
+            track = Track(
+                id=uuid.uuid4(),
+                name=filename,
+                samples=samples,
+                pos=0,
+                after_play=after_play,
+            )
+            self._sfx.append(track)
 
         self.resume()
         logger.info("There are now %d tracks in the mixer", len(self._sfx))
