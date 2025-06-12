@@ -221,7 +221,7 @@ async def test_search_exception(monkeypatch):
     assert result == []
 
 async def test_search_info_none(monkeypatch):
-    async def fake_to_thread(func): return None
+    async def fake_to_thread(func, *args): return None
     monkeypatch.setattr(asyncio, 'to_thread', fake_to_thread)
     with pytest.raises(TypeError):
         await handler.search_youtube('query')
@@ -234,7 +234,7 @@ async def test_search_valid(monkeypatch):
         {'id': '3', 'title': 'D', 'duration': 15},
     ]
     info = {'entries': entries}
-    async def fake_to_thread(func): return info
+    async def fake_to_thread(func, *args): return info
     monkeypatch.setattr(asyncio, 'to_thread', fake_to_thread)
     result = await handler.search_youtube('q', n=2)
     assert result == [
