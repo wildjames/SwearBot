@@ -151,20 +151,11 @@ async def test_play_next_success(monkeypatch, dummy_logger):
         lambda vc_in: asyncio.sleep(0, result=dummy_mixer),
     )
 
-    # Patch create_task on vc.loop to record scheduling of next
-    scheduled = []
-    monkeypatch.setattr(
-        vc.loop, "create_task", lambda coro: scheduled.append(coro) or asyncio.sleep(0)
-    )
-
     # Run play_next
     await ytj._play_next(vc)
 
     # After playback, queue should be empty and key removed
     assert 21 not in ytj.youtube_queue
-
-    # Should have scheduled next (even though queue is empty)
-    assert len(scheduled) == 1
 
 
 @pytest.mark.asyncio

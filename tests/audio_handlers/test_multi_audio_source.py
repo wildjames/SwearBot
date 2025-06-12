@@ -1,5 +1,6 @@
 # type: ignore
 import array
+import asyncio
 import shutil
 from uuid import uuid4
 import subprocess
@@ -15,19 +16,32 @@ from balaambot.audio_handlers.multi_audio_source import (
 
 # TODO: Write tests for the audio normalisation
 
+
+# TODO: This mock is broken
+class Loop:
+    def create_task(self, coro):
+        pass
+
+class MockVoiceChat:
+    def __init__(self):
+        self.loop = Loop()
+
+
 def test_is_opus_returns_false():
-    src = MultiAudioSource()
+    vc = MockVoiceChat()
+    src = MultiAudioSource(vc)
     assert not src.is_opus()
 
 
 def test_mix_samples_combines_and_clears_tracks():
-    src = MultiAudioSource()
+    vc = MockVoiceChat()
+    src = MultiAudioSource(vc)
 
     # Use small chunk size for testing (8 bytes -> 4 samples)
     src.CHUNK_SIZE = 8
     # Prepare tracks with after_play key for TypedDict
-    track1 = {"name": "name1", "id": uuid4(), "samples": array.array("h", [1, -1, 1, -1]), "pos": 0, "after_play": None}
-    track2 = {"name": "name2", "id": uuid4(), "samples": array.array("h", [2, -2, 2, -2]), "pos": 0, "after_play": None}
+    track1 = {"name": "name1", "id": uuid4(), "samples": array.array("h", [1, -1, 1, -1]), "pos": 0, "after_play": None, "before_play": None}
+    track2 = {"name": "name2", "id": uuid4(), "samples": array.array("h", [2, -2, 2, -2]), "pos": 0, "after_play": None, "before_play": None}
     # Assign tracks
     src._tracks = [track1, track2]
     src._sfx = []
@@ -45,7 +59,8 @@ def test_mix_samples_combines_and_clears_tracks():
 
 
 def test_read_clips_and_respects_stopped(monkeypatch):
-    src = MultiAudioSource()
+    vc = MockVoiceChat()
+    src = MultiAudioSource(vc)
     src.CHUNK_SIZE = 8
 
     # Stub mix to produce values outside clip range
@@ -70,7 +85,8 @@ def test_read_clips_and_respects_stopped(monkeypatch):
 
 
 def test_cleanup_clears_tracks_and_sets_stopped():
-    src = MultiAudioSource()
+    vc = MockVoiceChat()
+    src = MultiAudioSource(vc)
     src._tracks = [{"samples": array.array("h", [1]), "pos": 0}]
     src._stopped = False
     src.cleanup()
@@ -79,7 +95,10 @@ def test_cleanup_clears_tracks_and_sets_stopped():
 
 
 def test_play_file_success(monkeypatch, tmp_path):
-    src = MultiAudioSource()
+    vc = MockVoiceChat()
+    src = MultiAudioSource(vc)
+    src.CHUNK_SIZE = 2
+
     # Create a dummy file
     dummy = tmp_path / "dummy.wav"
     dummy.write_bytes(b"")
@@ -97,13 +116,19 @@ def test_play_file_success(monkeypatch, tmp_path):
 
     monkeypatch.setattr(subprocess, "Popen", DummyPopen)
 
-    # Track callback invocation
-    called = []
+    # Patch create_task on vc.loop to record scheduling of functions
+    scheduled = []
+    monkeypatch.setattr(
+        vc.loop, "create_task", lambda coro: scheduled.append(coro) or asyncio.sleep(0)
+    )
+
+    def before_play():
+        pass
 
     def after_play():
-        called.append(True)
+        pass
 
-    src.play_file(str(dummy), after_play=after_play)
+    src.play_file(str(dummy), before_play=before_play, after_play=after_play)
 
     # One track enqueued
     assert len(src._sfx) == 1
@@ -113,19 +138,24 @@ def test_play_file_success(monkeypatch, tmp_path):
     assert track["samples"] == array.array("h", [1, 2])
     assert track["pos"] == 0
 
-    # Callback not called until playback finishes
-    assert called == []
+    # Callbacks not called yet
+    assert scheduled == []
+
+    # The before function is called after the first read
+    src.read()
+    assert len(scheduled) == 1
 
     # read until the track is done
     while track["pos"] < len(track["samples"]):
         src.read()
 
     # After reading all samples, callback should be called
-    assert called == [True]
+    assert len(scheduled) == 2
 
 
 def test_play_file_ffmpeg_not_found(monkeypatch, tmp_path):
-    src = MultiAudioSource()
+    vc = MockVoiceChat()
+    src = MultiAudioSource(vc)
     dummy = tmp_path / "dummy.wav"
     dummy.write_bytes(b"")
     monkeypatch.setattr(shutil, "which", lambda name: None)
@@ -135,7 +165,8 @@ def test_play_file_ffmpeg_not_found(monkeypatch, tmp_path):
 
 
 def test_play_file_file_not_found():
-    src = MultiAudioSource()
+    vc = MockVoiceChat()
+    src = MultiAudioSource(vc)
     with pytest.raises(FileNotFoundError):
         src.play_file("nonexistent.wav")
 
@@ -217,7 +248,8 @@ async def test_ensure_mixer_multiple_guilds(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_play_youtube_success(monkeypatch):
-    src = MultiAudioSource()
+    vc = MockVoiceChat()
+    src = MultiAudioSource(vc)
     url = "yt://test"
     # prepare dummy PCM bytes: two int16 samples: [3, 4]
     pcm_bytes = b"\x03\x00\x04\x00"
@@ -245,7 +277,8 @@ async def test_play_youtube_success(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_play_youtube_missing_cache(monkeypatch):
-    src = MultiAudioSource()
+    vc = MockVoiceChat()
+    src = MultiAudioSource(vc)
     url = "yt://missing"
 
     async def fake_fetch(url_in, sample_rate, channels, username, password):
@@ -261,8 +294,10 @@ async def test_play_youtube_missing_cache(monkeypatch):
     assert f"Cached file for {url} missing" in str(exc.value)
 
 
-def test_mix_samples_with_callback_and_padding():
-    src = MultiAudioSource()
+def test_mix_samples_with_callback_and_padding(monkeypatch):
+    vc = MockVoiceChat()
+    src = MultiAudioSource(vc)
+
     # Make CHUNK_SIZE small: 4 bytes => 2 samples
     src.CHUNK_SIZE = 4
     called = []
@@ -273,23 +308,32 @@ def test_mix_samples_with_callback_and_padding():
     def cb():
         called.append(True)
 
-    track = {"name": "name", "id": uuid4(), "samples": samples, "pos": 0, "after_play": cb}
+    track = {"name": "name", "id": uuid4(), "samples": samples, "pos": 0, "before_play": cb, "after_play": cb}
     src._tracks = [track]
     src._sfx = []
+
+    # Patch create_task on vc.loop to record scheduling of functions
+    scheduled = []
+    monkeypatch.setattr(
+        vc.loop, "create_task", lambda coro: scheduled.append(coro) or asyncio.sleep(0)
+    )
 
     total = src._mix_samples()
     # Should have [5, 0] as int32 array
     assert isinstance(total, array.array) and total.typecode == "i"
     assert total.tolist() == [5, 0]
-    # after_play callback should have been called once
-    assert called == [True]
+
+    # callbacks should have been called once each
+    assert len(scheduled) == 2
+
     # track lists should now be empty
     assert src._tracks == []
     assert src._sfx == []
 
 
 def test_skip_current_tracks_invokes_callbacks_and_clears():
-    src = MultiAudioSource()
+    vc = MockVoiceChat()
+    src = MultiAudioSource(vc)
     src._stopped = False
 
     called = []
@@ -314,7 +358,8 @@ def test_skip_current_tracks_invokes_callbacks_and_clears():
 
 
 def test_skip_current_tracks_callback_exceptions_are_swallowed():
-    src = MultiAudioSource()
+    vc = MockVoiceChat()
+    src = MultiAudioSource(vc)
     src._tracks = [
         {
             "samples": array.array("h", [1]),
@@ -328,7 +373,8 @@ def test_skip_current_tracks_callback_exceptions_are_swallowed():
 
 
 def test_stop_sfx_and_stop_tracks_and_stop():
-    src = MultiAudioSource()
+    vc = MockVoiceChat()
+    src = MultiAudioSource(vc)
     src._sfx = [1, 2, 3]
     src._tracks = [4, 5, 6]
     src._stopped = False
@@ -345,16 +391,20 @@ def test_stop_sfx_and_stop_tracks_and_stop():
 
     # stop() should invoke both in sequence
     calls = []
+
     # monkeypatch instance methods
     mas.MultiAudioSource.clear_sfx = lambda self: calls.append("sfx")
     mas.MultiAudioSource.clear_tracks = lambda self: calls.append("tracks")
-    src2 = MultiAudioSource()
+
+    vc2 = MockVoiceChat()
+    src2 = MultiAudioSource(vc2)
     src2.clear_queue()
     assert calls == ["sfx", "tracks"]
 
 
 def test_cleanup_just_calls_stop(monkeypatch):
-    src = MultiAudioSource()
+    vc = MockVoiceChat()
+    src = MultiAudioSource(vc)
     called = []
     monkeypatch.setattr(src, "clear_queue", lambda: called.append(True))
     src.cleanup()

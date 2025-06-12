@@ -1,6 +1,10 @@
 import logging
+from collections.abc import Callable
+
+from discord.channel import CategoryChannel, ForumChannel
 
 from balaambot import discord_utils
+from balaambot.audio_handlers.youtube_audio import video_metadata
 
 # TODO: This should maintain a "playing" state so we can pause and resume playback
 
@@ -11,7 +15,9 @@ youtube_queue: dict[int, list[str]] = {}
 logger = logging.getLogger(__name__)
 
 
-async def add_to_queue(vc: discord_utils.DISCORD_VOICE_CLIENT, url: str) -> None:
+async def add_to_queue(
+    vc: discord_utils.DISCORD_VOICE_CLIENT, url: str, text_channel: int | None = None
+) -> None:
     """Add a YouTube URL to the playback queue for the given voice client.
 
     If nothing is playing, start playback immediately.
@@ -28,7 +34,7 @@ async def add_to_queue(vc: discord_utils.DISCORD_VOICE_CLIENT, url: str) -> None
 
         # Start playback immediately
         try:
-            vc.loop.create_task(_play_next(vc))
+            vc.loop.create_task(_play_next(vc, text_channel=text_channel))
         except Exception:
             logger.exception("Failed to start playback for guild_id=%s", vc.guild.id)
             # If we fail to start playback, we should clear the queue
@@ -36,7 +42,62 @@ async def add_to_queue(vc: discord_utils.DISCORD_VOICE_CLIENT, url: str) -> None
             raise
 
 
-async def _play_next(vc: discord_utils.DISCORD_VOICE_CLIENT) -> None:
+def create_before_after_functions(
+    url: str, vc: discord_utils.DISCORD_VOICE_CLIENT, text_channel: int | None = None
+) -> tuple[Callable[[], None], Callable[[], None]]:
+    """Create before and after play functions for a given YouTube URL.
+
+    Returns:
+        A tuple containing the before_play function and the after_play function.
+
+    """
+
+    def _before_play() -> None:
+        logger.info("Starting playback for %s", url)
+        if text_channel is not None:
+            channel = vc.guild.get_channel(text_channel)
+            if channel is not None and not isinstance(
+                channel, (ForumChannel, CategoryChannel)
+            ):
+                track = video_metadata.get(url)
+                content = "Playing next track"
+                if track:
+                    content = f"▶️    Now playing **[{track['title']}]({track['url']})**"
+
+                job = channel.send(content=content)
+                vc.loop.create_task(job)
+
+    def _after_play() -> None:
+        # Remove the URL from the queue after playback
+        youtube_queue[vc.guild.id].pop(0)
+
+        # If the queue is now empty, remove the guild entry
+        if not youtube_queue[vc.guild.id]:
+            youtube_queue.pop(vc.guild.id, None)
+            logger.info("Queue empty for guild_id=%s, removed queue", vc.guild.id)
+            if text_channel is not None:
+                channel = vc.guild.get_channel(text_channel)
+                if channel is not None and not isinstance(
+                    channel, (ForumChannel, CategoryChannel)
+                ):
+                    job = channel.send(content="😮‍💨    Finished playing queue!")
+                    vc.loop.create_task(job)
+
+        # Schedule the next track when this one finishes
+        logger.info("Finished playing %s for guild_id=%s", url, vc.guild.id)
+        try:
+            vc.loop.create_task(_play_next(vc))
+        except Exception:
+            logger.exception(
+                "Failed to schedule next track for guild_id=%s", vc.guild.id
+            )
+
+    return _before_play, _after_play
+
+
+async def _play_next(
+    vc: discord_utils.DISCORD_VOICE_CLIENT, text_channel: int | None = None
+) -> None:
     """Internal: play the next URL in the queue for vc, if any."""
     queue = youtube_queue.get(vc.guild.id)
     logger.info("Queue length for guild_id=%s: %d", vc.guild.id, len(queue or []))
@@ -49,36 +110,11 @@ async def _play_next(vc: discord_utils.DISCORD_VOICE_CLIENT) -> None:
     url = queue[0]
     logger.info("Starting playback of %s for guild_id=%s", url, vc.guild.id)
 
-    def _after_play(_err: Exception | None = None) -> None:
-        if _err:
-            logger.error(
-                "Error playing YouTube URL %s for guild_id=%s: %s",
-                url,
-                vc.guild.id,
-                _err,
-            )
-            raise _err
-
-        # Remove the URL from the queue after playback
-        youtube_queue[vc.guild.id].pop(0)
-
-        # If the queue is now empty, remove the guild entry
-        if not youtube_queue[vc.guild.id]:
-            youtube_queue.pop(vc.guild.id, None)
-            logger.info("Queue empty for guild_id=%s, removed queue", vc.guild.id)
-
-        # Schedule the next track when this one finishes
-        logger.info("Finished playing %s for guild_id=%s", url, vc.guild.id)
-        try:
-            vc.loop.create_task(_play_next(vc))
-        except Exception:
-            logger.exception(
-                "Failed to schedule next track for guild_id=%s", vc.guild.id
-            )
+    _before_play, _after_play = create_before_after_functions(url, vc, text_channel)
 
     try:
         mixer = await discord_utils.get_mixer_from_voice_client(vc)
-        await mixer.play_youtube(url, after_play=_after_play)
+        await mixer.play_youtube(url, before_play=_before_play, after_play=_after_play)
         # After transmitting silence, discord stops calling the read() method.
         # So, we need to call the play method again to get it going again.
         if not vc.is_playing():

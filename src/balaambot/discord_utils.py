@@ -1,11 +1,9 @@
 from typing import cast
 
 import discord
-from discord.ext import voice_recv
 
 from balaambot.audio_handlers.multi_audio_source import MultiAudioSource, ensure_mixer
-
-DISCORD_VOICE_CLIENT = voice_recv.VoiceRecvClient
+from balaambot.config import DISCORD_VOICE_CLIENT
 
 
 async def ensure_connected(
@@ -69,10 +67,6 @@ async def get_mixer_from_voice_client(
     vc: DISCORD_VOICE_CLIENT,
 ) -> MultiAudioSource:
     """Get the mixer for the given voice client."""
-    if not vc:
-        msg = "No active voice client."
-        raise ValueError(msg)
-
     mixer = await ensure_mixer(vc)
 
     if not mixer:

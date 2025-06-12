@@ -29,10 +29,10 @@ These are things that will likely take over an hour
 - [ ] Youtube age restricts some content, so I need to implement auth
 - [ ] Commands need to have guard clauses abstracted out into some discord utility functions
 - [ ] Add a way to scrub the currently playing track?
-- [ ] Send a message when a new track starts to play
 - [ ] Separate and optimize CI pipelines more
   - [x] Separate the CI pipeline and use the dedicated pipelines instead
   - [ ] Speed up docker builds - make sure caching is working properly
+- [x] Send a message when a new track starts to play
 - [x] Allow users to search youtube for videos
 - [x] Youtube playlist support
 - [x] Test coverage is abysmal. Expand to cover all the stuff I've done since I last did a push on tests.

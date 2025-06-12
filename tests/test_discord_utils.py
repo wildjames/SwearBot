@@ -146,13 +146,6 @@ async def test_get_mixer_from_interaction_failed_ensure_sends_and_raises(monkeyp
 
 
 @pytest.mark.asyncio
-async def test_get_mixer_from_voice_client_no_vc():
-    with pytest.raises(ValueError) as exc:
-        await get_mixer_from_voice_client(None)
-    assert str(exc.value) == "No active voice client."
-
-
-@pytest.mark.asyncio
 async def test_get_mixer_from_voice_client_failed_ensure(monkeypatch):
     vc = DummyVoiceClient()
 
