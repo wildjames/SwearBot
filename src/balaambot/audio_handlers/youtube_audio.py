@@ -52,9 +52,13 @@ async def get_youtube_track_metadata(url: str) -> VideoMetadata | None:
         "extract_flat": True,  # faster metadata-only extraction
     }
 
+    # run blocking extraction in thread
+    def _extract_info(opts: dict[str, Any], target_url: str) -> dict[str, Any] | None:
+        with YoutubeDL(opts) as ydl:
+            return ydl.extract_info(target_url, download=False)  # type: ignore[no-typing]
+
     try:
-        with YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)  # type: ignore[no-typing]
+        info = await asyncio.to_thread(_extract_info, ydl_opts, url)
     except DownloadError as e:
         logger.warning("yt-dlp failed to extract info for %s: %s", url, e)
         return None
@@ -103,14 +107,11 @@ async def fetch_audio_pcm(
 
         opus_tmp, pcm_tmp = get_temp_paths(url)
 
-        promises = [  # type: ignore[no-typing]
-            _download_opus(url, opus_tmp),
-            get_youtube_track_metadata(url),
-        ]
-
-        # Run download and metadata fetch concurrently
+        # download audio and fetch metadata concurrently
         try:
-            await asyncio.gather(*promises)  # type: ignore[no-typing]
+            await asyncio.gather(
+                _download_opus(url, opus_tmp), get_youtube_track_metadata(url)
+            )
         except DownloadError as e:
             logger.exception("yt-dlp failed to download %s", url)
             msg = f"Failed to download audio for {url}"
@@ -125,6 +126,7 @@ async def _download_opus(url: str, opus_tmp: Path) -> None:
     """Use yt-dlp to download and extract audio as opus into opus_tmp."""
     # Ensure directory exists
     opus_tmp.parent.mkdir(parents=True, exist_ok=True)
+
     ydl_opts: dict[str, Any] = {
         "logger": logger,
         "format": "bestaudio/best",
@@ -142,9 +144,13 @@ async def _download_opus(url: str, opus_tmp: Path) -> None:
         ],
         "outtmpl": str(opus_tmp.with_suffix("")),  # drop .part suffix
     }
+
+    # run blocking download in thread
+    def _sync_download(opts: dict[str, Any], target_url: str) -> None:
+        YoutubeDL(opts).download([target_url])  # type: ignore[no-typing]
+
     loop = asyncio.get_event_loop()
-    # Blocking download in executor
-    await loop.run_in_executor(None, lambda: YoutubeDL(ydl_opts).download([url]))  # type: ignore[no-typing]
+    await loop.run_in_executor(None, _sync_download, ydl_opts, url)
 
     final_opus = opus_tmp.with_suffix(".opus")
     if not final_opus.exists():
@@ -207,9 +213,13 @@ async def get_playlist_video_urls(playlist_url: str) -> list[str]:
         "extract_flat": "in_playlist",
     }
 
+    # run blocking playlist extraction in thread
+    def _extract_playlist(opts: dict[str, Any], url: str) -> dict[str, Any] | None:
+        with YoutubeDL(opts) as ydl:
+            return ydl.extract_info(url, download=False)  # type: ignore[no-typing]
+
     try:
-        with YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(playlist_url, download=False)  # type: ignore[no-typing]
+        info = await asyncio.to_thread(_extract_playlist, ydl_opts, playlist_url)
     except DownloadError as e:
         logger.warning(
             "yt-dlp failed to extract playlist info for %s: %s", playlist_url, e
@@ -257,11 +267,13 @@ async def search_youtube(search: str, n: int = 5) -> list[tuple[str, str, float]
 
     try:
         # Run the (blocking) extract info call in an async thread
-        def _run_extract() -> dict[str, Any] | None:
-            with YoutubeDL(ydl_opts) as ydl:
-                return ydl.extract_info(search, download=False)  # type: ignore[no-typing]
+        def _run_extract(opts: dict[str, Any], query: str) -> dict[str, Any] | None:
+            with YoutubeDL(opts) as ydl:
+                return ydl.extract_info(query, download=False)  # type: ignore[no-typing]
 
-        info: dict[str, Any] | None = await asyncio.to_thread(_run_extract)
+        info: dict[str, Any] | None = await asyncio.to_thread(
+            _run_extract, ydl_opts, search
+        )
 
     except DownloadError as e:
         logger.warning("yt-dlp failed to extract search for %s: %s", search, e)
