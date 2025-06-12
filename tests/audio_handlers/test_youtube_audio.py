@@ -12,10 +12,10 @@ pytestmark = pytest.mark.asyncio
 @ pytest.fixture(autouse=True)
 def clear_state():
     # Clear cached metadata and locks before each test
-    handler._video_metadata.clear()
+    handler.video_metadata.clear()
     handler._download_locks.clear()
     yield
-    handler._video_metadata.clear()
+    handler.video_metadata.clear()
     handler._download_locks.clear()
 
 # Tests for get_youtube_track_metadata
@@ -27,7 +27,7 @@ async def test_invalid_url(monkeypatch):
 async def test_cached_metadata(monkeypatch):
     monkeypatch.setattr(handler, 'is_valid_youtube_url', lambda url: True)
     cached = handler.VideoMetadata(url='u', title='t', runtime=5, runtime_str='0:05')
-    handler._video_metadata['u'] = cached
+    handler.video_metadata['u'] = cached
     result = await handler.get_youtube_track_metadata('u')
     assert result is cached
 
@@ -62,7 +62,7 @@ async def test_successful_metadata(monkeypatch):
     monkeypatch.setattr(utils, 'sec_to_string', lambda s: '2:03')
     result = await handler.get_youtube_track_metadata('url1')
     assert result == {'url': 'url1', 'title': 'My Video', 'runtime': 123, 'runtime_str': '2:03'}
-    assert handler._video_metadata['url1'] == result
+    assert handler.video_metadata['url1'] == result
 
 # Tests for fetch_audio_pcm
 async def test_fetch_audio_cache_hit(monkeypatch, tmp_path):

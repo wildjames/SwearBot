@@ -229,11 +229,19 @@ class MultiAudioSource(AudioSource):
             which: either "before_play" or "after_play"
 
         """
-        callback = track[which]
+        if which == "before_play":
+            callback = track["before_play"]
+        elif which == "after_play":
+            callback = track["after_play"]
+        else:
+            msg = "which must be either before_play or after_play"
+            raise ValueError(msg)
+
         if callback:
             # schedule the coroutine on the bot's loop without blocking this thread
             try:
-                self.vc.loop.create_task(asyncio.to_thread(callback))
+                job = asyncio.to_thread(callback)
+                self.vc.loop.create_task(job)
             except Exception:
                 logger.exception(
                     "Failed to schedule %s callback for track %s", which, track["name"]
