@@ -1,4 +1,5 @@
 import array
+import asyncio
 import logging
 import shutil
 import subprocess
@@ -9,10 +10,11 @@ from math import sqrt
 from pathlib import Path
 from typing import TypedDict
 
-from discord import AudioSource, VoiceClient
+from discord import AudioSource
 
 from balaambot.audio_handlers.youtube_audio import fetch_audio_pcm
 from balaambot.audio_handlers.youtube_utils import get_audio_pcm
+from balaambot.config import DISCORD_VOICE_CLIENT
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +22,7 @@ logger = logging.getLogger(__name__)
 _mixers: dict[int, "MultiAudioSource"] = {}
 
 
-async def ensure_mixer(vc: VoiceClient) -> "MultiAudioSource":
+async def ensure_mixer(vc: DISCORD_VOICE_CLIENT) -> "MultiAudioSource":
     """Get or create a MultiAudioSource mixer for the given VoiceClient.
 
     If a mixer does not already exist for the guild, a new one is instantiated,
@@ -36,7 +38,7 @@ async def ensure_mixer(vc: VoiceClient) -> "MultiAudioSource":
     """
     gid = vc.guild.id
     if gid not in _mixers:
-        mixer = MultiAudioSource()
+        mixer = MultiAudioSource(vc=vc)
         vc.play(mixer, signal_type="music")  # start the background mixer thread
         _mixers[gid] = mixer
         logger.info("Created mixer for guild %s", gid)
@@ -57,6 +59,7 @@ class Track(TypedDict):
     name: str
     samples: array.array[int]
     pos: int
+    before_play: Callable[[], None] | None
     after_play: Callable[[], None] | None
 
 
@@ -83,8 +86,12 @@ class MultiAudioSource(AudioSource):
     # "max" or "std_dev"
     NORMALISATION_APPROACH = "std_dev"
 
-    def __init__(self, *, normalise_audio: bool = False) -> None:
+    def __init__(
+        self, vc: DISCORD_VOICE_CLIENT, *, normalise_audio: bool = False
+    ) -> None:
         """Initialize the mixer, setting up track storage and synchronization."""
+        self.vc = vc
+
         self._lock = threading.Lock()
 
         self._tracks: list[Track] = []
@@ -214,6 +221,24 @@ class MultiAudioSource(AudioSource):
             max([int(s * factor) for s in track["samples"]]),
         )
 
+    def handle_callback(self, track: Track, which: str) -> None:
+        """Execute the before or after callback for a track.
+
+        Arguments:
+            track: The track to process
+            which: either "before_play" or "after_play"
+
+        """
+        callback = track[which]
+        if callback:
+            # schedule the coroutine on the bot's loop without blocking this thread
+            try:
+                self.vc.loop.create_task(asyncio.to_thread(callback))
+            except Exception:
+                logger.exception(
+                    "Failed to schedule %s callback for track %s", which, track["name"]
+                )
+
     def _mix_samples(self) -> array.array[int]:
         """Combine PCM data from all active tracks and sound effects.
 
@@ -234,6 +259,9 @@ class MultiAudioSource(AudioSource):
             pos = track["pos"]
             end = pos + (self.CHUNK_SIZE // 2)
 
+            if pos == 0:
+                self.handle_callback(track, "before_play")
+
             if end > len(samples):
                 pad = array.array("h", [0] * (end - len(samples)))
                 samples.extend(pad)
@@ -244,7 +272,6 @@ class MultiAudioSource(AudioSource):
 
             chunk = samples[pos:end]
             for i, s in enumerate(chunk):
-                # TODO: When the norm factor is a float, this is ~5x slower than for int
                 total[i] += (
                     # Clamp to within MIN and MAX
                     max(self.MIN_VOLUME, min(int(s * norm_factor), self.MAX_VOLUME))
@@ -252,16 +279,12 @@ class MultiAudioSource(AudioSource):
             track["pos"] = end
 
             if end >= len(samples):
-                callback = track.get("after_play")
-                if callback:
-                    try:
-                        logger.info("Calling after_play callback for track")
-                        callback()
-                    except Exception:
-                        logger.exception("Error in after_play callback")
+                # Finished with playback on this track.
+                self.handle_callback(track, "after_play")
                 # Clean up the normalisation factors dictionary.
                 self._track_norm_factors.pop(track["id"], None)
             else:
+                # Continue playing
                 if track in self._tracks:
                     new_tracks.append(track)
                 if track in self._sfx:
@@ -325,6 +348,7 @@ class MultiAudioSource(AudioSource):
         url: str,
         username: str | None = None,
         password: str | None = None,
+        before_play: Callable[[], None] | None = None,
         after_play: Callable[[], None] | None = None,
     ) -> None:
         """Decode and queue audio from a YouTube URL for playback.
@@ -336,6 +360,7 @@ class MultiAudioSource(AudioSource):
             url: The YouTube video URL to play.
             username: Optional YouTube account username for private content.
             password: Optional YouTube account password.
+            before_play: Optional callback to invoke when playback starts.
             after_play: Optional callback to invoke when playback ends.
 
         Raises:
@@ -365,6 +390,7 @@ class MultiAudioSource(AudioSource):
                 name=url,
                 samples=samples,
                 pos=0,
+                before_play=before_play,
                 after_play=after_play,
             )
             self._compute_normalisation_factor(track)
@@ -375,7 +401,10 @@ class MultiAudioSource(AudioSource):
         self.resume()
 
     def play_file(
-        self, filename: str, after_play: Callable[[], None] | None = None
+        self,
+        filename: str,
+        before_play: Callable[[], None] | None = None,
+        after_play: Callable[[], None] | None = None,
     ) -> None:
         """Decode an audio file via ffmpeg and enqueue it for mixing.
 
@@ -384,6 +413,7 @@ class MultiAudioSource(AudioSource):
 
         Args:
             filename: Path to the audio file to play.
+            before_play: Optional callback invoked when the file starts playing.
             after_play: Optional callback invoked when the file finishes playing.
 
         Raises:
@@ -435,6 +465,7 @@ class MultiAudioSource(AudioSource):
                 name=filename,
                 samples=samples,
                 pos=0,
+                before_play=before_play,
                 after_play=after_play,
             )
             self._sfx.append(track)

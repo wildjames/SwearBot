@@ -29,7 +29,7 @@ class VideoMetadata(TypedDict):
 
 
 # Keyed by URL, values are VideoMetadata
-_video_metadata: dict[str, VideoMetadata] = {}
+video_metadata: dict[str, VideoMetadata] = {}
 
 # Locks to prevent multiple simultaneous downloads of the same URL
 _download_locks: dict[str, asyncio.Lock] = {}
@@ -43,8 +43,8 @@ async def get_youtube_track_metadata(url: str) -> VideoMetadata | None:
         return None
 
     # return cached metadata if available
-    if url in _video_metadata:
-        return _video_metadata[url]
+    if url in video_metadata:
+        return video_metadata[url]
 
     ydl_opts = {
         "quiet": True,
@@ -70,14 +70,14 @@ async def get_youtube_track_metadata(url: str) -> VideoMetadata | None:
     duration_s = cast("int", info.get("duration")) or 0  # type: ignore[no-typing]
 
     # cache and return
-    _video_metadata[url] = VideoMetadata(
+    video_metadata[url] = VideoMetadata(
         url=url,
         title=title,
         runtime=duration_s,
         runtime_str=utils.sec_to_string(duration_s),
     )
-    logger.debug("Cached metadata for %s: %s", url, _video_metadata[url])
-    return _video_metadata[url]
+    logger.debug("Cached metadata for %s: %s", url, video_metadata[url])
+    return video_metadata[url]
 
 
 async def fetch_audio_pcm(

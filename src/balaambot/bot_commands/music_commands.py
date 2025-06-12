@@ -184,7 +184,9 @@ class MusicCommands(commands.Cog):
                 )
             )
             fetch_tasks.append(fetch_task)
-            await youtube_jobs.add_to_queue(vc, track_url)
+            await youtube_jobs.add_to_queue(
+                vc, track_url, text_channel=interaction.channel_id
+            )
 
         # Confirmation message
         await interaction.followup.send(
@@ -228,7 +230,7 @@ class MusicCommands(commands.Cog):
         )
 
         # Add to queue. Playback (in mixer) will await cache when it's time
-        await youtube_jobs.add_to_queue(vc, url)
+        await youtube_jobs.add_to_queue(vc, url, text_channel=interaction.channel_id)
 
         track_meta = await youtube_audio.get_youtube_track_metadata(url)
         if track_meta is None:
@@ -244,9 +246,8 @@ class MusicCommands(commands.Cog):
         runtime = track_meta["runtime_str"]
 
         msg = (
-            f"🎵    Queued **{track_meta['title']} ({runtime})** at position {pos}."
-            if pos > 1
-            else f"▶️    Now playing **{track_meta['title']}**"
+            f"🎵    Queued **[{track_meta['title']}]({track_meta['url']})"
+            f" ({runtime})** at position {pos}."
         )
         await interaction.followup.send(msg, ephemeral=False)
 
@@ -295,7 +296,8 @@ class MusicCommands(commands.Cog):
                     lines.append(f"{i + 1}. [Invalid track URL]({url})")
                     continue
                 lines.append(
-                    f"{i + 1}. {track_meta['title']} ({track_meta['runtime_str']})"
+                    f"{i + 1}. [{track_meta['title']}]({track_meta['url']})"
+                    f" ({track_meta['runtime_str']})"
                 )
                 total_runtime += track_meta["runtime"]
 
@@ -305,7 +307,8 @@ class MusicCommands(commands.Cog):
             else:
                 lines[0] = (
                     "**Now playing:** "
-                    f"{track_meta['title']} ({track_meta['runtime_str']})"
+                    f"[{track_meta['title']}]({track_meta['url']})"
+                    f" ({track_meta['runtime_str']})"
                 )
             msg = "**Upcoming tracks:**\n" + "\n".join(lines)
 
@@ -357,7 +360,7 @@ class MusicCommands(commands.Cog):
             )
             return
         await interaction.followup.send(
-            f"⏭️    Skipped to next track: {track_meta['title']}",
+            f"⏭️    Skipped to next track: [{track_meta['title']}]({track_meta['url']})",
             ephemeral=False,
         )
 
