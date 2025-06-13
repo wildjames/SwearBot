@@ -3,7 +3,7 @@
 # Installs both normal and dev dependencies
 # Not needed for running as uv run handles deps itself
 install-dev:
-	uv run pre-commit install
+	uv run pre-commit install --install-hooks
 	uv sync
 
 lint:
