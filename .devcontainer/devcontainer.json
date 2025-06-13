@@ -1,7 +1,6 @@
 {
     "name": "Balaam Bot",
     "build": {
-        "context": "..",
         "dockerfile": "Dockerfile",
         "args": {
             "UV_VERSION": "latest",
@@ -50,6 +49,5 @@
         "UV_PROJECT_ENVIRONMENT": "/home/vscode/.venv"
     },
     "postCreateCommand": "make install-dev",
-    "postStartCommand": "uv run pre-commit install",
     "remoteUser": "vscode"
 }
