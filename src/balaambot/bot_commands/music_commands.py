@@ -111,6 +111,12 @@ class MusicCommands(commands.Cog):
         self, interaction: discord.Interaction, query: str
     ) -> None:
         """Search for videos based on the query and display selection buttons."""
+        # Check if the user is in a voice channel
+        vc_mixer = await discord_utils.get_voice_channel_mixer(interaction)
+        if vc_mixer is None:
+            return
+        vc, mixer = vc_mixer
+
         results = await youtube_audio.search_youtube(query)
         # Each result is a tuple: (url, title, duration_in_seconds)
 
@@ -142,24 +148,11 @@ class MusicCommands(commands.Cog):
         self, interaction: discord.Interaction, playlist_url: str
     ) -> None:
         """Handle enqueuing all videos from a YouTube playlist."""
-        if interaction.guild is None:
-            return await interaction.followup.send(
-                "This command can only be used in a server.", ephemeral=True
-            )
-
-        member = interaction.guild.get_member(interaction.user.id)
-        if (
-            not member
-            or not member.voice
-            or not isinstance(member.voice.channel, discord.VoiceChannel)
-        ):
-            return await interaction.followup.send(
-                "Join a voice channel first.", ephemeral=True
-            )
-
-        vc = await discord_utils.ensure_connected(
-            interaction.guild, member.voice.channel
-        )
+        # Check if the user is in a voice channel
+        vc_mixer = await discord_utils.get_voice_channel_mixer(interaction)
+        if vc_mixer is None:
+            return None
+        vc, mixer = vc_mixer
 
         # Fetch playlist video URLs
         track_urls = await youtube_audio.get_playlist_video_urls(playlist_url)
@@ -187,25 +180,11 @@ class MusicCommands(commands.Cog):
 
     async def do_play(self, interaction: discord.Interaction, url: str) -> None:
         """Play a YouTube video by fetching and streaming the audio from the URL."""
-        if interaction.guild is None:
-            return await interaction.followup.send(
-                "This command can only be used in a server.", ephemeral=True
-            )
-
-        member = interaction.guild.get_member(interaction.user.id)
-        if (
-            not member
-            or not member.voice
-            or not isinstance(member.voice.channel, discord.VoiceChannel)
-        ):
-            return await interaction.followup.send(
-                "Join a voice channel first.", ephemeral=True
-            )
-
-        vc = await discord_utils.ensure_connected(
-            interaction.guild,
-            member.voice.channel,
-        )
+        # Check if the user is in a voice channel
+        vc_mixer = await discord_utils.get_voice_channel_mixer(interaction)
+        if vc_mixer is None:
+            return
+        vc, mixer = vc_mixer
 
         # Add to queue. Playback (in mixer) will await cache when it's time
         await youtube_jobs.add_to_queue(vc, url, text_channel=interaction.channel_id)
@@ -216,7 +195,7 @@ class MusicCommands(commands.Cog):
                 f"Failed to fetch track metadata. Please check the URL. [{url}]",
                 ephemeral=True,
             )
-            return None
+            return
 
         queue = await youtube_jobs.list_queue(vc)
         pos = len(queue)
@@ -228,8 +207,6 @@ class MusicCommands(commands.Cog):
             f" ({runtime})** at position {pos}."
         )
         await interaction.followup.send(msg, ephemeral=False)
-
-        return None
 
     @app_commands.command(name="list_queue", description="List upcoming YouTube tracks")
     async def list_queue(self, interaction: discord.Interaction) -> None:

@@ -63,3 +63,44 @@ async def get_mixer_from_interaction(
         raise ValueError(msg)
 
     return mixer
+
+
+def get_mixer_from_voice_client(
+    vc: DISCORD_VOICE_CLIENT,
+) -> MultiAudioSource:
+    """Get the mixer for the given voice client."""
+    mixer = ensure_mixer(vc)
+
+    if not mixer:
+        msg = "Failed to connect to the voice channel."
+        raise ValueError(msg)
+
+    return mixer
+
+
+async def get_voice_channel_mixer(
+    interaction: discord.Interaction,
+) -> tuple[DISCORD_VOICE_CLIENT, MultiAudioSource] | None:
+    """Ensure the user is in a voice channel and returns the channel and mixer."""
+    if interaction.guild is None:
+        await interaction.followup.send(
+            "This command can only be used in a server.", ephemeral=True
+        )
+        return None
+
+    member = interaction.guild.get_member(interaction.user.id)
+    if (
+        not member
+        or not member.voice
+        or not isinstance(member.voice.channel, discord.VoiceChannel)
+    ):
+        await interaction.followup.send("Join a voice channel first.", ephemeral=True)
+        return None
+
+    vc = await ensure_connected(
+        interaction.guild,
+        member.voice.channel,
+    )
+
+    mixer = get_mixer_from_voice_client(vc)
+    return vc, mixer

@@ -1,8 +1,11 @@
 {
     "name": "Balaam Bot",
+    // TODO re-enable once arm builds working
+    // "image": "wizenedchimp/balaambot-devcontainer:latest",
+    // This is only needed if you want to build and test the devcontainer locally
     "build": {
-        "context": "..",
         "dockerfile": "Dockerfile",
+        "cacheFrom": "wizenedchimp/balaambot-devcontainer:latest",
         "args": {
             "UV_VERSION": "latest",
             "DEBIAN_VERSION": "bookworm"
@@ -50,6 +53,5 @@
         "UV_PROJECT_ENVIRONMENT": "/home/vscode/.venv"
     },
     "postCreateCommand": "make install-dev",
-    "postStartCommand": "uv run pre-commit install",
     "remoteUser": "vscode"
 }

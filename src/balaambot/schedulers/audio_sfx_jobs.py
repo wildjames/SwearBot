@@ -56,7 +56,7 @@ async def _play_sfx_loop(vc: discord_utils.DISCORD_VOICE_CLIENT, job_id: str) ->
                 done_event.set()
 
             try:
-                mixer = await discord_utils.get_mixer_from_voice_client(vc)
+                mixer = discord_utils.get_mixer_from_voice_client(vc)
                 mixer.play_file(sound, after_play=_after_play)
             except Exception:
                 logger.exception("Error playing %s", sound)
