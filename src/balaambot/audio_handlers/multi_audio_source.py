@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 _mixers: dict[int, "MultiAudioSource"] = {}
 
 
-async def ensure_mixer(vc: DISCORD_VOICE_CLIENT) -> "MultiAudioSource":
+def ensure_mixer(vc: DISCORD_VOICE_CLIENT) -> "MultiAudioSource":
     """Get or create a MultiAudioSource mixer for the given VoiceClient.
 
     If a mixer does not already exist for the guild, a new one is instantiated,

@@ -51,25 +51,12 @@ async def get_mixer_from_interaction(
             raise ValueError(msg)
 
     vc = cast("DISCORD_VOICE_CLIENT", vc)
-    mixer = await ensure_mixer(vc)
+    mixer = ensure_mixer(vc)
 
     if not mixer:
         await interaction.followup.send(
             "Failed to connect to the voice channel.", ephemeral=True
         )
-        msg = "Failed to connect to the voice channel."
-        raise ValueError(msg)
-
-    return mixer
-
-
-async def get_mixer_from_voice_client(
-    vc: DISCORD_VOICE_CLIENT,
-) -> MultiAudioSource:
-    """Get the mixer for the given voice client."""
-    mixer = await ensure_mixer(vc)
-
-    if not mixer:
         msg = "Failed to connect to the voice channel."
         raise ValueError(msg)
 

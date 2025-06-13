@@ -31,6 +31,9 @@ class VideoMetadata(TypedDict):
 # Keyed by URL, values are VideoMetadata
 video_metadata: dict[str, VideoMetadata] = {}
 
+# This will hold the upcoming tracks metadata
+youtube_queue: list[VideoMetadata] = []
+
 # Locks to prevent multiple simultaneous downloads of the same URL
 _download_locks: dict[str, asyncio.Lock] = {}
 

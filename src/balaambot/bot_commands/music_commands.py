@@ -1,7 +1,5 @@
-import asyncio
 import logging
 from collections.abc import Awaitable, Callable
-from typing import TYPE_CHECKING
 
 import discord
 from discord import Client, InteractionCallbackResponse, app_commands
@@ -11,9 +9,6 @@ from discord.ui import Button, View
 from balaambot import discord_utils, utils
 from balaambot.audio_handlers import youtube_audio, youtube_utils
 from balaambot.schedulers import youtube_jobs
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -164,7 +159,6 @@ class MusicCommands(commands.Cog):
         vc = await discord_utils.ensure_connected(
             interaction.guild, member.voice.channel
         )
-        mixer = await discord_utils.get_mixer_from_voice_client(vc)
 
         # Fetch playlist video URLs
         track_urls = await youtube_audio.get_playlist_video_urls(playlist_url)
@@ -174,16 +168,8 @@ class MusicCommands(commands.Cog):
             )
 
         # Enqueue all tracks and start background fetches
-        fetch_tasks: list[asyncio.Task[Path]] = []
         for track_url in track_urls:
-            fetch_task = asyncio.create_task(
-                youtube_audio.fetch_audio_pcm(
-                    track_url,
-                    sample_rate=mixer.SAMPLE_RATE,
-                    channels=mixer.CHANNELS,
-                )
-            )
-            fetch_tasks.append(fetch_task)
+            # These have to be awaited, to preserve order.
             await youtube_jobs.add_to_queue(
                 vc, track_url, text_channel=interaction.channel_id
             )
@@ -193,8 +179,6 @@ class MusicCommands(commands.Cog):
             f"🎵    Queued {len(track_urls)} tracks from playlist.", ephemeral=False
         )
 
-        # And wait for the first video to download
-        await fetch_tasks[0]
         return None
 
     async def do_play(self, interaction: discord.Interaction, url: str) -> None:
@@ -217,16 +201,6 @@ class MusicCommands(commands.Cog):
         vc = await discord_utils.ensure_connected(
             interaction.guild,
             member.voice.channel,
-        )
-        mixer = await discord_utils.get_mixer_from_voice_client(vc)
-
-        # download and cache in background
-        fetch_task = asyncio.create_task(
-            youtube_audio.fetch_audio_pcm(
-                url,
-                sample_rate=mixer.SAMPLE_RATE,
-                channels=mixer.CHANNELS,
-            )
         )
 
         # Add to queue. Playback (in mixer) will await cache when it's time
@@ -251,11 +225,7 @@ class MusicCommands(commands.Cog):
         )
         await interaction.followup.send(msg, ephemeral=False)
 
-        # wait for the background fetch to complete (so file is ready later)
-        try:
-            await fetch_task
-        except Exception:
-            logger.exception("Failed to fetch audio for %s", url)
+        return None
 
     @app_commands.command(name="list_queue", description="List upcoming YouTube tracks")
     async def list_queue(self, interaction: discord.Interaction) -> None:

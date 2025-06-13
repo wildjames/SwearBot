@@ -4,13 +4,16 @@ from collections.abc import Callable
 from discord.channel import CategoryChannel, ForumChannel
 
 from balaambot import discord_utils
-from balaambot.audio_handlers.youtube_audio import video_metadata
+from balaambot.audio_handlers.multi_audio_source import ensure_mixer
+from balaambot.audio_handlers.youtube_audio import fetch_audio_pcm, video_metadata
 
 # TODO: This should maintain a "playing" state so we can pause and resume playback
 
 # Mapping from voice client to its queue of YouTube URLs
 # The key is the guild ID, and the value is a list of URLs.
 youtube_queue: dict[int, list[str]] = {}
+# Always check that this many tracks in the queue are cached
+QUEUE_FORESIGHT = 3
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +25,7 @@ async def add_to_queue(
 
     If nothing is playing, start playback immediately.
     """
+    # TODO: Don't pre-fetch tracks in the queue, download them just before playing
     queue = youtube_queue.setdefault(vc.guild.id, [])
     queue.append(url)
     logger.info(
@@ -66,6 +70,21 @@ def create_before_after_functions(
 
                 job = channel.send(content=content)
                 vc.loop.create_task(job)
+
+        logger.info(
+            "Checking that the next %d youtube audios are downloaded", QUEUE_FORESIGHT
+        )
+        mixer = ensure_mixer(vc)
+
+        # TODO: spawn a new process for each of these
+        [
+            fetch_audio_pcm(
+                queued_url,
+                sample_rate=mixer.SAMPLE_RATE,
+                channels=mixer.CHANNELS,
+            )
+            for queued_url in youtube_queue[vc.guild.id][:QUEUE_FORESIGHT]
+        ]
 
     def _after_play() -> None:
         # Remove the URL from the queue after playback
@@ -113,7 +132,7 @@ async def _play_next(
     _before_play, _after_play = create_before_after_functions(url, vc, text_channel)
 
     try:
-        mixer = await discord_utils.get_mixer_from_voice_client(vc)
+        mixer = ensure_mixer(vc)
         await mixer.play_youtube(url, before_play=_before_play, after_play=_after_play)
         # After transmitting silence, discord stops calling the read() method.
         # So, we need to call the play method again to get it going again.
@@ -135,7 +154,7 @@ def get_current_track(vc: discord_utils.DISCORD_VOICE_CLIENT) -> str | None:
 
 async def skip(vc: discord_utils.DISCORD_VOICE_CLIENT) -> None:
     """Skip the current track and play the next in queue."""
-    mixer = await discord_utils.get_mixer_from_voice_client(vc)
+    mixer = ensure_mixer(vc)
     try:
         # This triggers the after_play callback which will handle the next track
         logger.info("Skipping current track for guild_id=%s", vc.guild.id)
@@ -160,7 +179,7 @@ async def list_queue(vc: discord_utils.DISCORD_VOICE_CLIENT) -> list[str]:
 async def stop(vc: discord_utils.DISCORD_VOICE_CLIENT) -> None:
     """Stop playback and clear the queue."""
     # Stop current playback
-    mixer = await discord_utils.get_mixer_from_voice_client(vc)
+    mixer = ensure_mixer(vc)
     try:
         mixer.clear_tracks()
         mixer.pause()
