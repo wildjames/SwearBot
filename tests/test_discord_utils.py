@@ -171,3 +171,90 @@ async def test_get_mixer_from_voice_client_success(monkeypatch):
 
     result = await get_mixer_from_voice_client(vc)
     assert result is dummy_mixer
+
+
+# --- Tests for get_voice_channel ---
+
+
+@pytest.mark.asyncio
+async def test_get_voice_channel_no_guild():
+    interaction = DummyInteraction(guild=None, user=DummyUser(1))
+    result = await discord_utils.get_voice_channel(interaction)
+    assert result is None
+    assert interaction.followup.sent == [
+        ("This command can only be used in a server.", True)
+    ]
+
+
+@pytest.mark.asyncio
+async def test_get_voice_channel_member_not_found():
+    guild = DummyGuild(voice_client=None, members={})
+    interaction = DummyInteraction(guild, DummyUser(1))
+    result = await discord_utils.get_voice_channel(interaction)
+    assert result is None
+    assert interaction.followup.sent == [
+        ("You must join a voice channel to use this command.", True)
+    ]
+
+
+@pytest.mark.asyncio
+async def test_get_voice_channel_member_no_voice():
+    member = DummyMember(user_id=1, voice=None)
+    guild = DummyGuild(voice_client=None, members={1: member})
+    interaction = DummyInteraction(guild, DummyUser(1))
+    result = await discord_utils.get_voice_channel(interaction)
+    assert result is None
+    assert interaction.followup.sent == [
+        ("You must join a voice channel to use this command.", True)
+    ]
+
+
+@pytest.mark.asyncio
+async def test_get_voice_channel_member_channel_not_voicechannel(monkeypatch):
+    class NotAChannel:
+        pass
+
+    voice = DummyVoice(channel=NotAChannel())
+    member = DummyMember(user_id=1, voice=voice)
+    guild = DummyGuild(voice_client=None, members={1: member})
+    interaction = DummyInteraction(guild, DummyUser(1))
+    result = await discord_utils.get_voice_channel(interaction)
+    assert result is None
+    assert interaction.followup.sent == [
+        ("You must join a voice channel to use this command.", True)
+    ]
+
+
+@pytest.mark.asyncio
+async def test_get_voice_channel_success(monkeypatch):
+    class DummyVoiceChannel:
+        pass
+
+    class DummyVC:
+        pass
+
+    async def fake_ensure_connected(guild, channel):
+        return "connected"
+
+    voice_channel = DummyVoiceChannel()
+    voice = DummyVoice(channel=voice_channel)
+    member = DummyMember(user_id=1, voice=voice)
+    guild = DummyGuild(voice_client=None, members={1: member})
+    interaction = DummyInteraction(guild, DummyUser(1))
+    monkeypatch.setattr(discord_utils, "ensure_connected", fake_ensure_connected)
+
+    # Patch isinstance to treat DummyVoiceChannel as discord.VoiceChannel
+    orig_isinstance = isinstance
+
+    def fake_isinstance(obj, typ):
+        if orig_isinstance(typ, tuple):
+            return any(
+                getattr(t, "__name__", None) == "VoiceChannel" and orig_isinstance(obj, DummyVoiceChannel)
+                for t in typ
+            ) or orig_isinstance(obj, typ)
+        return getattr(typ, "__name__", None) == "VoiceChannel" and orig_isinstance(obj, DummyVoiceChannel) or orig_isinstance(obj, typ)
+
+    monkeypatch.setattr("builtins.isinstance", fake_isinstance)
+    result = await discord_utils.get_voice_channel(interaction)
+    assert result == "connected"
+    assert interaction.followup.sent == []
