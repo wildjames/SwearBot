@@ -160,7 +160,7 @@ async def _download_opus(
                 "preferredcodec": "opus",
             }
         ],
-        "outtmpl": str(opus_tmp.with_suffix("")),  # drop .part suffix
+        "outtmpl": str(opus_tmp.with_suffix("")),
     }
 
     loop = asyncio.get_event_loop()
