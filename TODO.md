@@ -2,6 +2,8 @@
 
 These are smaller jobs, that shouldn't take too long to knock down individually.
 
+- [ ] Refactor the video metadata to store metadata in a json file, and retrieve from there. Then, get the metadata in a subprocess whenever something is added to the queue.
+  - [ ] Really, this should be a cache of some kind. Redis probably, but it's a lot of effort and I'm not sure the juice is worth the squeeze just for this.
 - [ ] Add a cronjob to remove cached audio files that are over a week old
 - [ ] When the bot sends a message with a youtube video in it, it should contain a link to the video
 - [ ] too many sounds in the zip. /list_sfx gives an error because it hits the message limit
