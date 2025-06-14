@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 async def add_to_queue(
-    vc: discord_utils.DISCORD_VOICE_CLIENT, url: str, text_channel: int | None = None
+    vc: discord_utils.DiscordVoiceClient, url: str, text_channel: int | None = None
 ) -> None:
     """Add a YouTube URL to the playback queue for the given voice client.
 
@@ -43,7 +43,7 @@ async def add_to_queue(
 
 
 def create_before_after_functions(
-    url: str, vc: discord_utils.DISCORD_VOICE_CLIENT, text_channel: int | None = None
+    url: str, vc: discord_utils.DiscordVoiceClient, text_channel: int | None = None
 ) -> tuple[Callable[[], None], Callable[[], None]]:
     """Create before and after play functions for a given YouTube URL.
 
@@ -96,7 +96,7 @@ def create_before_after_functions(
 
 
 async def _play_next(
-    vc: discord_utils.DISCORD_VOICE_CLIENT, text_channel: int | None = None
+    vc: discord_utils.DiscordVoiceClient, text_channel: int | None = None
 ) -> None:
     """Internal: play the next URL in the queue for vc, if any."""
     queue = youtube_queue.get(vc.guild.id)
@@ -125,7 +125,7 @@ async def _play_next(
         youtube_queue.pop(vc.guild.id, None)
 
 
-def get_current_track(vc: discord_utils.DISCORD_VOICE_CLIENT) -> str | None:
+def get_current_track(vc: discord_utils.DiscordVoiceClient) -> str | None:
     """Get the currently playing YouTube URL for the voice client."""
     queue = youtube_queue.get(vc.guild.id)
     if queue and len(queue) > 0:
@@ -133,7 +133,7 @@ def get_current_track(vc: discord_utils.DISCORD_VOICE_CLIENT) -> str | None:
     return None
 
 
-async def skip(vc: discord_utils.DISCORD_VOICE_CLIENT) -> None:
+async def skip(vc: discord_utils.DiscordVoiceClient) -> None:
     """Skip the current track and play the next in queue."""
     mixer = await discord_utils.get_mixer_from_voice_client(vc)
     try:
@@ -144,7 +144,7 @@ async def skip(vc: discord_utils.DISCORD_VOICE_CLIENT) -> None:
         logger.exception("Error stopping current track for guild_id=%s", vc.guild.id)
 
 
-async def clear_queue(vc: discord_utils.DISCORD_VOICE_CLIENT) -> None:
+async def clear_queue(vc: discord_utils.DiscordVoiceClient) -> None:
     """Clear all queued tracks for the voice client. Excludes current playback."""
     if vc.guild.id in youtube_queue:
         # Remove all but the currently playing track
@@ -152,12 +152,12 @@ async def clear_queue(vc: discord_utils.DISCORD_VOICE_CLIENT) -> None:
         logger.info("Cleared YouTube queue for guild_id=%s", vc.guild.id)
 
 
-async def list_queue(vc: discord_utils.DISCORD_VOICE_CLIENT) -> list[str]:
+async def list_queue(vc: discord_utils.DiscordVoiceClient) -> list[str]:
     """Return the list of queued URLs for the voice client."""
     return list(youtube_queue.get(vc.guild.id, []))
 
 
-async def stop(vc: discord_utils.DISCORD_VOICE_CLIENT) -> None:
+async def stop(vc: discord_utils.DiscordVoiceClient) -> None:
     """Stop playback and clear the queue."""
     # Stop current playback
     mixer = await discord_utils.get_mixer_from_voice_client(vc)

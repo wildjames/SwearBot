@@ -10,6 +10,7 @@ from discord.ui import Button, View
 
 from balaambot import discord_utils, utils
 from balaambot.audio_handlers import youtube_audio, youtube_utils
+from balaambot.config import DiscordVoiceClient
 from balaambot.schedulers import youtube_jobs
 
 if TYPE_CHECKING:
@@ -22,12 +23,16 @@ class SearchView(View):
     """A view containing buttons for selecting search results."""
 
     def __init__(
-        self, parent: "MusicCommands", results_list: list[tuple[str, str, float]]
+        self,
+        parent: "MusicCommands",
+        vc: DiscordVoiceClient,
+        results_list: list[tuple[str, str, float]],
     ) -> None:
         """Set up the internal structures."""
         super().__init__(timeout=None)  # no timeout so buttons remain valid
         self.results = results_list
         self.parent = parent
+        self.vc = vc
 
         for idx, (url, title, _) in enumerate(self.results):
             button = Button(  # type: ignore  This type error is daft and I hate it so fuck that
@@ -62,7 +67,7 @@ class SearchView(View):
             await inner_interaction.response.edit_message(
                 content=f"Playing {title}", view=None, delete_after=5
             )
-            await self.parent.do_play(inner_interaction, url)
+            await self.parent.do_play(inner_interaction, self.vc, url)
 
         return callback
 
@@ -81,25 +86,29 @@ class MusicCommands(commands.Cog):
     async def play(self, interaction: discord.Interaction, query: str) -> None:
         """Enqueue a YouTube URL; starts playback if idle."""
         await interaction.response.defer(thinking=True, ephemeral=True)
+        # Check if the user is in a voice channel
+        vc = await discord_utils.get_voice_channel(interaction)
+        if vc is None:
+            return
 
         query = query.strip()
 
         # Handle playlist URLs
         if youtube_utils.is_valid_youtube_playlist(query):
             logger.info("Received play command for playlist URL: '%s'", query)
-            self.bot.loop.create_task(self.do_play_playlist(interaction, query))
+            self.bot.loop.create_task(self.do_play_playlist(interaction, vc, query))
             return
 
         # Handle youtube videos
         if youtube_utils.is_valid_youtube_url(query):
             logger.info("Received play command for URL: '%s'", query)
-            self.bot.loop.create_task(self.do_play(interaction, query))
+            self.bot.loop.create_task(self.do_play(interaction, vc, query))
             return
 
         # Fall back to searching youtube and asking the user to select a search result
         if query:
             logger.info("Recieved a string. Searching youtube for videos. '%s'", query)
-            self.bot.loop.create_task(self.do_search_youtube(interaction, query))
+            self.bot.loop.create_task(self.do_search_youtube(interaction, vc, query))
             return
 
         # Failed to do anything. I think this is only reached if the query is empty?
@@ -112,15 +121,9 @@ class MusicCommands(commands.Cog):
         return
 
     async def do_search_youtube(
-        self, interaction: discord.Interaction, query: str
+        self, interaction: discord.Interaction, vc: DiscordVoiceClient, query: str
     ) -> None:
         """Search for videos based on the query and display selection buttons."""
-        # Check if the user is in a voice channel
-        vc_mixer = await discord_utils.get_voice_channel_mixer(interaction)
-        if vc_mixer is None:
-            return
-        vc, mixer = vc_mixer
-
         results = await youtube_audio.search_youtube(query)
         # Each result is a tuple: (url, title, duration_in_seconds)
 
@@ -144,19 +147,18 @@ class MusicCommands(commands.Cog):
         # Send the reply with the View
         await interaction.followup.send(
             content=description,
-            view=SearchView(self, results),
+            view=SearchView(self, vc, results),
             ephemeral=True,
         )
 
     async def do_play_playlist(
-        self, interaction: discord.Interaction, playlist_url: str
+        self,
+        interaction: discord.Interaction,
+        vc: DiscordVoiceClient,
+        playlist_url: str,
     ) -> None:
         """Handle enqueuing all videos from a YouTube playlist."""
-        # Check if the user is in a voice channel
-        vc_mixer = await discord_utils.get_voice_channel_mixer(interaction)
-        if vc_mixer is None:
-            return None
-        vc, mixer = vc_mixer
+        mixer = await discord_utils.get_mixer_from_voice_client(vc)
 
         # Fetch playlist video URLs
         track_urls = await youtube_audio.get_playlist_video_urls(playlist_url)
@@ -189,13 +191,11 @@ class MusicCommands(commands.Cog):
         await fetch_tasks[0]
         return None
 
-    async def do_play(self, interaction: discord.Interaction, url: str) -> None:
+    async def do_play(
+        self, interaction: discord.Interaction, vc: DiscordVoiceClient, url: str
+    ) -> None:
         """Play a YouTube video by fetching and streaming the audio from the URL."""
-        # Check if the user is in a voice channel
-        vc_mixer = await discord_utils.get_voice_channel_mixer(interaction)
-        if vc_mixer is None:
-            return
-        vc, mixer = vc_mixer
+        mixer = await discord_utils.get_mixer_from_voice_client(vc)
 
         # download and cache in background
         fetch_task = asyncio.create_task(
@@ -238,27 +238,10 @@ class MusicCommands(commands.Cog):
     async def list_queue(self, interaction: discord.Interaction) -> None:
         """Show the current YouTube queue for this server."""
         await interaction.response.defer(ephemeral=True, thinking=True)
-        if interaction.guild is None:
-            await interaction.followup.send(
-                "This command only works in a server.",
-                ephemeral=True,
-            )
+        # Check if the user is in a voice channel
+        vc = await discord_utils.get_voice_channel(interaction)
+        if vc is None:
             return
-        member = interaction.guild.get_member(interaction.user.id)
-        if (
-            not member
-            or not member.voice
-            or not isinstance(member.voice.channel, discord.VoiceChannel)
-        ):
-            await interaction.followup.send(
-                "You need to be in a standard voice channel to view the queue.",
-                ephemeral=True,
-            )
-            return
-        vc = await discord_utils.ensure_connected(
-            interaction.guild,
-            member.voice.channel,
-        )
         upcoming = await youtube_jobs.list_queue(vc)
 
         if not upcoming:
@@ -299,28 +282,13 @@ class MusicCommands(commands.Cog):
     async def skip(self, interaction: discord.Interaction) -> None:
         """Stop current track and play next in queue."""
         await interaction.response.defer(ephemeral=True, thinking=True)
-        if interaction.guild is None:
-            await interaction.followup.send(
-                "This command only works in a server.", ephemeral=True
-            )
+        # Check if the user is in a voice channel
+        vc = await discord_utils.get_voice_channel(interaction)
+        if vc is None:
             return
-        member = interaction.guild.get_member(interaction.user.id)
-        if (
-            not member
-            or not member.voice
-            or not isinstance(member.voice.channel, discord.VoiceChannel)
-        ):
-            await interaction.followup.send(
-                "You need to be in a standard voice channel to skip audio.",
-                ephemeral=True,
-            )
-            return
-        vc = await discord_utils.ensure_connected(
-            interaction.guild,
-            member.voice.channel,
-        )
+
         await youtube_jobs.skip(vc)
-        logger.info("Skipped track for guild_id=%s", interaction.guild.id)
+        logger.info("Skipped track for guild_id=%s", vc.guild.id)
 
         track_url = youtube_jobs.get_current_track(vc)
         if not track_url:
@@ -347,26 +315,10 @@ class MusicCommands(commands.Cog):
     )
     async def stop_music(self, interaction: discord.Interaction) -> None:
         """Stop the current YouTube track and clear all queued tracks."""
-        if interaction.guild is None:
-            await interaction.response.send_message(
-                "This command only works in a server.", ephemeral=True
-            )
+        # Check if the user is in a voice channel
+        vc = await discord_utils.get_voice_channel(interaction)
+        if vc is None:
             return
-        member = interaction.guild.get_member(interaction.user.id)
-        if (
-            not member
-            or not member.voice
-            or not isinstance(member.voice.channel, discord.VoiceChannel)
-        ):
-            await interaction.response.send_message(
-                "You need to be in a standard voice channel to stop music.",
-                ephemeral=True,
-            )
-            return
-        vc = await discord_utils.ensure_connected(
-            interaction.guild,
-            member.voice.channel,
-        )
         await youtube_jobs.stop(vc)
         await interaction.response.send_message(
             "⏹️    Stopped and cleared YouTube queue.", ephemeral=False
@@ -375,26 +327,11 @@ class MusicCommands(commands.Cog):
     @app_commands.command(name="clear_queue", description="Clear the YouTube queue")
     async def clear_queue(self, interaction: discord.Interaction) -> None:
         """Remove all queued YouTube tracks."""
-        if interaction.guild is None:
-            await interaction.response.send_message(
-                "This command only works in a server.", ephemeral=True
-            )
+        # Check if the user is in a voice channel
+        vc = await discord_utils.get_voice_channel(interaction)
+        if vc is None:
             return
-        member = interaction.guild.get_member(interaction.user.id)
-        if (
-            not member
-            or not member.voice
-            or not isinstance(member.voice.channel, discord.VoiceChannel)
-        ):
-            await interaction.response.send_message(
-                "You need to be in a standard voice channel to clear the queue.",
-                ephemeral=True,
-            )
-            return
-        vc = await discord_utils.ensure_connected(
-            interaction.guild, member.voice.channel
-        )
-        logger.info("Clearing YouTube queue for guild_id=%s", interaction.guild.id)
+        logger.info("Clearing YouTube queue for guild_id=%s", vc.guild.id)
 
         # Clear the queue
         await youtube_jobs.clear_queue(vc)

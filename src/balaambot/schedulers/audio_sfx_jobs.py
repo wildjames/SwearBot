@@ -20,11 +20,11 @@ logger.info(
 #   job_id -> (VoiceClient, asyncio.Task, sound_file, min_interval, max_interval)
 loop_jobs: dict[
     str,
-    tuple[discord_utils.DISCORD_VOICE_CLIENT, asyncio.Task[None], str, float, float],
+    tuple[discord_utils.DiscordVoiceClient, asyncio.Task[None], str, float, float],
 ] = {}
 
 
-async def _play_sfx_loop(vc: discord_utils.DISCORD_VOICE_CLIENT, job_id: str) -> None:
+async def _play_sfx_loop(vc: discord_utils.DiscordVoiceClient, job_id: str) -> None:
     """Internal loop: play the given SFX on its own schedule.
 
     This function is run in a separate task and will be cancelled when the
@@ -70,7 +70,7 @@ async def _play_sfx_loop(vc: discord_utils.DISCORD_VOICE_CLIENT, job_id: str) ->
 
 
 async def add_job(
-    vc: discord_utils.DISCORD_VOICE_CLIENT,
+    vc: discord_utils.DiscordVoiceClient,
     sound: str,
     min_interval: float,
     max_interval: float,
@@ -103,7 +103,7 @@ async def remove_job(job_id: str) -> None:
     )
 
 
-async def stop_all_jobs(vc: discord_utils.DISCORD_VOICE_CLIENT) -> None:
+async def stop_all_jobs(vc: discord_utils.DiscordVoiceClient) -> None:
     """Stop all SFX jobs for the given voice client."""
     jobs_to_remove = [jid for jid, (j_vc, *_) in loop_jobs.items() if j_vc == vc]
     for job_id in jobs_to_remove:

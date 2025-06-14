@@ -14,7 +14,7 @@ from discord import AudioSource
 
 from balaambot.audio_handlers.youtube_audio import fetch_audio_pcm
 from balaambot.audio_handlers.youtube_utils import get_audio_pcm
-from balaambot.config import DISCORD_VOICE_CLIENT
+from balaambot.config import DiscordVoiceClient
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 _mixers: dict[int, "MultiAudioSource"] = {}
 
 
-async def ensure_mixer(vc: DISCORD_VOICE_CLIENT) -> "MultiAudioSource":
+async def ensure_mixer(vc: DiscordVoiceClient) -> "MultiAudioSource":
     """Get or create a MultiAudioSource mixer for the given VoiceClient.
 
     If a mixer does not already exist for the guild, a new one is instantiated,
@@ -87,7 +87,7 @@ class MultiAudioSource(AudioSource):
     NORMALISATION_APPROACH = "std_dev"
 
     def __init__(
-        self, vc: DISCORD_VOICE_CLIENT, *, normalise_audio: bool = False
+        self, vc: DiscordVoiceClient, *, normalise_audio: bool = False
     ) -> None:
         """Initialize the mixer, setting up track storage and synchronization."""
         self.vc = vc
