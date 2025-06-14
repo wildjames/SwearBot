@@ -192,13 +192,13 @@ async def test_ensure_mixer_creates_and_reuses():
             self.played.append(source)
 
     vc1 = DummyVC(42)
-    mixer1 = await ensure_mixer(vc1)
+    mixer1 = ensure_mixer(vc1)
     assert isinstance(mixer1, MultiAudioSource)
     assert mixer1 in calls
 
     # Calling again for same guild should not create a new mixer or call play
     vc2 = DummyVC(42)
-    mixer2 = await ensure_mixer(vc2)
+    mixer2 = ensure_mixer(vc2)
     assert mixer2 is mixer1
     assert vc2.played == []
 
@@ -227,21 +227,21 @@ async def test_ensure_mixer_multiple_guilds(monkeypatch):
 
     # First guild should create a new mixer and call play()
     vc1 = DummyVC(1)
-    mixer1 = await ensure_mixer(vc1)
+    mixer1 = ensure_mixer(vc1)
     assert isinstance(mixer1, MultiAudioSource)
     assert _mixers[1] is mixer1
     assert vc1.played == [mixer1]
 
     # Second guild should get its own mixer
     vc2 = DummyVC(2)
-    mixer2 = await ensure_mixer(vc2)
+    mixer2 = ensure_mixer(vc2)
     assert mixer2 is not mixer1
     assert _mixers[2] is mixer2
     assert vc2.played == [mixer2]
 
     # Calling again for guild 1 should reuse and not call play()
     vc1b = DummyVC(1)
-    mixer1b = await ensure_mixer(vc1b)
+    mixer1b = ensure_mixer(vc1b)
     assert mixer1b is mixer1
     assert vc1b.played == []
 

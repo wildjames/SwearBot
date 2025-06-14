@@ -81,7 +81,7 @@ async def test_fetch_audio_download_error(monkeypatch, tmp_path):
     cache = tmp_path / 'out.pcm'
     monkeypatch.setattr(handler, 'get_cache_path', lambda u, sr, ch: cache)
     monkeypatch.setattr(handler, 'get_temp_paths', lambda u: (tmp_path / 'a.opus', tmp_path / 'b.pcm'))
-    async def fail_download(u, p): raise DownloadError('dl fail')
+    async def fail_download(u, p, username=None, password=None): raise DownloadError('dl fail')
     monkeypatch.setattr(handler, '_download_opus', fail_download)
     async def dummy_meta(u): return None
     monkeypatch.setattr(handler, 'get_youtube_track_metadata', dummy_meta)
@@ -95,7 +95,7 @@ async def test_fetch_audio_success(monkeypatch, tmp_path):
     pcm_tmp = tmp_path / 't.pcm'
     monkeypatch.setattr(handler, 'get_cache_path', lambda u, sr, ch: cache)
     monkeypatch.setattr(handler, 'get_temp_paths', lambda u: (opus_tmp, pcm_tmp))
-    async def fake_download(u, p): p.write_bytes(b'o')
+    async def fake_download(u, p, username=None, password=None): p.write_bytes(b'o')
     monkeypatch.setattr(handler, '_download_opus', fake_download)
     async def fake_meta(u): return {'url': u, 'title': 't', 'runtime': 1, 'runtime_str': '0:01'}
     monkeypatch.setattr(handler, 'get_youtube_track_metadata', fake_meta)

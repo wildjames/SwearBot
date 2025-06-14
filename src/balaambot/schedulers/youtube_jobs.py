@@ -3,9 +3,11 @@ from collections.abc import Callable
 
 from discord.channel import CategoryChannel, ForumChannel
 
-from balaambot import discord_utils
+from balaambot import discord_utils, utils
 from balaambot.audio_handlers.multi_audio_source import ensure_mixer
 from balaambot.audio_handlers.youtube_audio import video_metadata
+from balaambot.audio_handlers.youtube_utils import get_cache_path, get_temp_paths
+from balaambot.schedulers.youtube_download_worker import download_and_convert
 
 # TODO: This should maintain a "playing" state so we can pause and resume playback
 
@@ -43,6 +45,34 @@ async def add_to_queue(
             # If we fail to start playback, we should clear the queue
             youtube_queue.pop(vc.guild.id, None)
             raise
+
+
+async def _maybe_preload_next_tracks(
+    vc: discord_utils.DISCORD_VOICE_CLIENT,
+    queue: list[str],
+    foresight: int = QUEUE_FORESIGHT,
+) -> None:
+    for url in queue[1 : foresight + 1]:  # skip the currently playing track
+        mixer = ensure_mixer(vc)
+
+        cache_path = get_cache_path(url, mixer.SAMPLE_RATE, mixer.CHANNELS)
+        if cache_path.exists():
+            continue  # already downloaded
+
+        opus_tmp, pcm_tmp = get_temp_paths(url)
+        try:
+            await vc.loop.run_in_executor(
+                utils.FUTURES_EXECUTOR,
+                download_and_convert,
+                url,
+                opus_tmp,
+                pcm_tmp,
+                cache_path,
+                mixer.SAMPLE_RATE,
+                mixer.CHANNELS,
+            )
+        except Exception:
+            logger.exception("Failed to pre-download %s", url)
 
 
 def create_before_after_functions(
@@ -122,6 +152,8 @@ async def _play_next(
         # So, we need to call the play method again to get it going again.
         if not vc.is_playing():
             vc.play(mixer)
+
+        await _maybe_preload_next_tracks(vc, queue)
     except Exception:
         logger.exception("Error playing YouTube URL %s", url)
         # Clear the queue to avoid infinite retries
