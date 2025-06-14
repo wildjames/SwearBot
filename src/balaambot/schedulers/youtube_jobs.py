@@ -73,6 +73,13 @@ async def _maybe_preload_next_tracks(
             )
         except Exception:
             logger.exception("Failed to pre-download %s", url)
+            try:
+                queue.remove(url)
+                logger.warning("Removed %s from queue due to pre-download failure", url)
+                # Try fetching again
+                await _maybe_preload_next_tracks(vc, queue, foresight)
+            except ValueError:
+                pass  # Already removed or not present
 
 
 def create_before_after_functions(
