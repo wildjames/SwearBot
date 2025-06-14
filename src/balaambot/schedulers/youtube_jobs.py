@@ -5,7 +5,7 @@ from discord.channel import CategoryChannel, ForumChannel
 
 from balaambot import discord_utils
 from balaambot.audio_handlers.multi_audio_source import ensure_mixer
-from balaambot.audio_handlers.youtube_audio import fetch_audio_pcm, video_metadata
+from balaambot.audio_handlers.youtube_audio import video_metadata
 
 # TODO: This should maintain a "playing" state so we can pause and resume playback
 
@@ -45,7 +45,7 @@ async def add_to_queue(
             raise
 
 
-def create_before_after_functions(  # noqa: C901
+def create_before_after_functions(
     url: str, vc: discord_utils.DISCORD_VOICE_CLIENT, text_channel: int | None = None
 ) -> tuple[Callable[[], None], Callable[[], None]]:
     """Create before and after play functions for a given YouTube URL.
@@ -69,16 +69,6 @@ def create_before_after_functions(  # noqa: C901
 
                 job = channel.send(content=content)
                 vc.loop.create_task(job)
-
-        logger.info(
-            "Checking that the next %d youtube audios are downloaded", QUEUE_FORESIGHT
-        )
-        mixer = ensure_mixer(vc)
-
-        for queued_url in youtube_queue[vc.guild.id][:QUEUE_FORESIGHT]:
-            vc.loop.create_task(
-                fetch_audio_pcm(queued_url, mixer.SAMPLE_RATE, mixer.CHANNELS)
-            )
 
     def _after_play() -> None:
         # Remove the URL from the queue after playback

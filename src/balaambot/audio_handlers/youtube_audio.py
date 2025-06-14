@@ -123,6 +123,11 @@ async def fetch_audio_pcm(
         return cache_path
 
 
+# Helper for when I run blocking download in thread
+def _sync_download(opts: dict[str, Any], target_url: str) -> None:
+    YoutubeDL(opts).download([target_url])  # type: ignore[no-typing]
+
+
 async def _download_opus(
     url: str,
     opus_tmp: Path,
@@ -154,10 +159,6 @@ async def _download_opus(
         ],
         "outtmpl": str(opus_tmp.with_suffix("")),  # drop .part suffix
     }
-
-    # run blocking download in thread
-    def _sync_download(opts: dict[str, Any], target_url: str) -> None:
-        YoutubeDL(opts).download([target_url])  # type: ignore[no-typing]
 
     loop = asyncio.get_event_loop()
     await loop.run_in_executor(utils.FUTURES_EXECUTOR, _sync_download, ydl_opts, url)

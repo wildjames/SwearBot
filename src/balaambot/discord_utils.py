@@ -5,6 +5,8 @@ import discord
 from balaambot.audio_handlers.multi_audio_source import MultiAudioSource, ensure_mixer
 from balaambot.config import DISCORD_VOICE_CLIENT
 
+MAX__MESSAGE_LENGTH = 2000
+
 
 async def ensure_connected(
     guild: discord.Guild, channel: discord.VoiceChannel

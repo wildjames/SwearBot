@@ -103,6 +103,7 @@ class MusicCommands(commands.Cog):
                 "Invalid play command. Please provide a valid youtube video "
                 "or playlist link, or a searchable string."
             ),
+            ephemeral=True,
         )
         return
 
@@ -263,13 +264,18 @@ class MusicCommands(commands.Cog):
             for i, url in enumerate(upcoming):
                 track_meta = await youtube_audio.get_youtube_track_metadata(url)
                 if track_meta is None:
-                    lines.append(f"{i + 1}. [Invalid track URL]({url})")
-                    continue
-                lines.append(
-                    f"{i + 1}. [{track_meta['title']}]({track_meta['url']})"
-                    f" ({track_meta['runtime_str']})"
-                )
-                total_runtime += track_meta["runtime"]
+                    new_line = f"{i + 1}. [Invalid track URL]({url})"
+                else:
+                    new_line = (
+                        f"{i + 1}. {track_meta['title']} ({track_meta['runtime_str']})"
+                    )
+                    total_runtime += track_meta["runtime"]
+
+                if (
+                    sum([len(s) for s in lines]) + len(new_line) + 100
+                    > discord_utils.MAX__MESSAGE_LENGTH
+                ):
+                    lines.append(new_line)
 
             track_meta = await youtube_audio.get_youtube_track_metadata(upcoming[0])
             if track_meta is None:

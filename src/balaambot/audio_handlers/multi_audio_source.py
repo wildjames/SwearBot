@@ -401,7 +401,7 @@ class MultiAudioSource(AudioSource):
                 before_play=before_play,
                 after_play=after_play,
             )
-            self._compute_normalisation_factor(track)
+            # self._compute_normalisation_factor(track)
             self._tracks.append(track)
 
         logger.info("Loaded data for URL: %s", url)
