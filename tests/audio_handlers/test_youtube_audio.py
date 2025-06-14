@@ -116,7 +116,6 @@ async def test_download_opus_failure(monkeypatch, tmp_path):
         await handler._download_opus(url, opus_tmp)
     assert 'yt-dlp failed to produce' in str(ei.value)
 
-
 async def test_download_opus_success(monkeypatch, tmp_path):
     url = "u"
     opus_tmp = tmp_path / "file"
@@ -252,3 +251,26 @@ async def test_search_valid(monkeypatch):
         ('https://www.youtube.com/watch?v=1', 'A', 10),
         ('https://www.youtube.com/watch?v=3', 'D', 15),
     ]
+
+# Tests for the new _sync_download helper
+def test_sync_download_success(monkeypatch):
+    called = {}
+    class DummyYDL:
+        def __init__(self, opts):
+            called['opts'] = opts
+        def download(self, urls):
+            called['urls'] = urls
+    monkeypatch.setattr(handler, 'YoutubeDL', DummyYDL)
+    opts = {'format': 'bestaudio'}
+    url = 'https://youtu.be/test'
+    handler._sync_download(opts, url)
+    assert called['opts'] is opts
+    assert called['urls'] == [url]
+
+def test_sync_download_propagates_error(monkeypatch):
+    class DummyYDL:
+        def __init__(self, opts): pass
+        def download(self, urls): raise DownloadError('dl fail')
+    monkeypatch.setattr(handler, 'YoutubeDL', DummyYDL)
+    with pytest.raises(DownloadError):
+        handler._sync_download({'a': 1}, 'u')
