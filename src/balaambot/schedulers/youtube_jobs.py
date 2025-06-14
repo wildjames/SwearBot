@@ -55,7 +55,14 @@ async def _maybe_preload_next_tracks(
     queue: list[str],
     foresight: int = QUEUE_FORESIGHT,
 ) -> None:
-    for url in queue[1 : foresight + 1]:  # skip the currently playing track
+    logger.info("Caching the next %d tracks in the queue...", foresight)
+
+    upcoming = queue[1 : foresight + 1]  # skip the currently playing track
+
+    for url in upcoming:
+        logger.info("  - Caching %s", url)
+
+    for url in upcoming:
         mixer = ensure_mixer(vc)
 
         cache_path = get_cache_path(url, mixer.SAMPLE_RATE, mixer.CHANNELS)
