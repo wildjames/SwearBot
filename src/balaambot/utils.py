@@ -1,3 +1,8 @@
+import concurrent.futures
+
+FUTURES_EXECUTOR = concurrent.futures.ProcessPoolExecutor()
+
+
 def sec_to_string(val: float) -> str:
     """Convert a number of seconds to a human-readable string, (HH:)MM:SS."""
     sec_in_hour = 60 * 60

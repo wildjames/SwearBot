@@ -28,6 +28,7 @@ These are things that will likely take over an hour
 - [x] Some things are not async enough, it seems. Downloading videos can cause playback to stutter. Break out the downloading logic to multithreading/processing?
   - [ ] tentatively solved. Needs thorough testing though
 - [ ] When adding a lot of songs to the queue, don't download them all in advance. Only download the current track, and the next one.
+- [ ] Should we stream opus data rather than PCM?
 - [ ] Youtube age restricts some content, so I need to implement auth
 - [ ] Commands need to have guard clauses abstracted out into some discord utility functions
 - [ ] Add a way to scrub the currently playing track?

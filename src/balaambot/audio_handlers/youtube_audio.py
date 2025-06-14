@@ -99,10 +99,6 @@ async def fetch_audio_pcm(
     if cache_path.exists():
         return cache_path
 
-    if username or password:
-        msg = "YouTube authentication is not implemented yet."
-        raise NotImplementedError(msg)
-
     lock = _download_locks.setdefault(url, asyncio.Lock())
     async with lock:
         if cache_path.exists():
@@ -113,7 +109,8 @@ async def fetch_audio_pcm(
         # download audio and fetch metadata concurrently
         try:
             await asyncio.gather(
-                _download_opus(url, opus_tmp), get_youtube_track_metadata(url)
+                _download_opus(url, opus_tmp, username=username, password=password),
+                get_youtube_track_metadata(url),
             )
         except DownloadError as e:
             logger.exception("yt-dlp failed to download %s", url)
@@ -121,12 +118,22 @@ async def fetch_audio_pcm(
             raise RuntimeError(msg) from e
 
         await _convert_opus_to_pcm(opus_tmp, pcm_tmp, cache_path, sample_rate, channels)
+        # TODO: Dispatch ffmpeg to normalise the volume here
 
         return cache_path
 
 
-async def _download_opus(url: str, opus_tmp: Path) -> None:
+async def _download_opus(
+    url: str,
+    opus_tmp: Path,
+    username: str | None = None,
+    password: str | None = None,
+) -> None:
     """Use yt-dlp to download and extract audio as opus into opus_tmp."""
+    if username or password:
+        msg = "YouTube authentication is not implemented yet."
+        raise NotImplementedError(msg)
+
     # Ensure directory exists
     opus_tmp.parent.mkdir(parents=True, exist_ok=True)
 
@@ -153,7 +160,7 @@ async def _download_opus(url: str, opus_tmp: Path) -> None:
         YoutubeDL(opts).download([target_url])  # type: ignore[no-typing]
 
     loop = asyncio.get_event_loop()
-    await loop.run_in_executor(None, _sync_download, ydl_opts, url)
+    await loop.run_in_executor(utils.FUTURES_EXECUTOR, _sync_download, ydl_opts, url)
 
     final_opus = opus_tmp.with_suffix(".opus")
     if not final_opus.exists():

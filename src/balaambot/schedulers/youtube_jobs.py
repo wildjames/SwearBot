@@ -25,7 +25,6 @@ async def add_to_queue(
 
     If nothing is playing, start playback immediately.
     """
-    # TODO: Don't pre-fetch tracks in the queue, download them just before playing
     queue = youtube_queue.setdefault(vc.guild.id, [])
     queue.append(url)
     logger.info(
@@ -46,7 +45,7 @@ async def add_to_queue(
             raise
 
 
-def create_before_after_functions(
+def create_before_after_functions(  # noqa: C901
     url: str, vc: discord_utils.DISCORD_VOICE_CLIENT, text_channel: int | None = None
 ) -> tuple[Callable[[], None], Callable[[], None]]:
     """Create before and after play functions for a given YouTube URL.
@@ -76,15 +75,10 @@ def create_before_after_functions(
         )
         mixer = ensure_mixer(vc)
 
-        # TODO: spawn a new process for each of these
-        [
-            fetch_audio_pcm(
-                queued_url,
-                sample_rate=mixer.SAMPLE_RATE,
-                channels=mixer.CHANNELS,
+        for queued_url in youtube_queue[vc.guild.id][:QUEUE_FORESIGHT]:
+            vc.loop.create_task(
+                fetch_audio_pcm(queued_url, mixer.SAMPLE_RATE, mixer.CHANNELS)
             )
-            for queued_url in youtube_queue[vc.guild.id][:QUEUE_FORESIGHT]
-        ]
 
     def _after_play() -> None:
         # Remove the URL from the queue after playback
