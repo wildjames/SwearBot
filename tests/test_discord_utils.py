@@ -112,7 +112,7 @@ async def test_get_mixer_from_interaction_connects_and_returns_mixer(monkeypatch
     # Monkey‐patch ensure_mixer to return our DummyMixer
     dummy_mixer = DummyMixer()
 
-    async def fake_ensure(vcin):
+    def fake_ensure(vcin):
         return dummy_mixer
 
     monkeypatch.setattr(discord_utils, "ensure_mixer", fake_ensure)
@@ -128,7 +128,7 @@ async def test_get_mixer_from_interaction_failed_ensure_sends_and_raises(monkeyp
     guild = DummyGuild(voice_client=vc, members={})
     interaction = DummyInteraction(guild, DummyUser(2))
 
-    async def fake_ensure(vcin):
+    def fake_ensure(vcin):
         return None
 
     monkeypatch.setattr(discord_utils, "ensure_mixer", fake_ensure)
@@ -145,29 +145,27 @@ async def test_get_mixer_from_interaction_failed_ensure_sends_and_raises(monkeyp
 # --- Tests for get_mixer_from_voice_client ---
 
 
-@pytest.mark.asyncio
-async def test_get_mixer_from_voice_client_failed_ensure(monkeypatch):
+def test_get_mixer_from_voice_client_failed_ensure(monkeypatch):
     vc = DummyVoiceClient()
 
-    async def fake_ensure(vcin):
+    def fake_ensure(vcin):
         return None
 
     monkeypatch.setattr(discord_utils, "ensure_mixer", fake_ensure)
 
     with pytest.raises(ValueError) as exc:
-        await get_mixer_from_voice_client(vc)
+        get_mixer_from_voice_client(vc)
     assert str(exc.value) == "Failed to connect to the voice channel."
 
 
-@pytest.mark.asyncio
-async def test_get_mixer_from_voice_client_success(monkeypatch):
+def test_get_mixer_from_voice_client_success(monkeypatch):
     vc = DummyVoiceClient()
     dummy_mixer = DummyMixer()
 
-    async def fake_ensure(vcin):
+    def fake_ensure(vcin):
         return dummy_mixer
 
     monkeypatch.setattr(discord_utils, "ensure_mixer", fake_ensure)
 
-    result = await get_mixer_from_voice_client(vc)
+    result = get_mixer_from_voice_client(vc)
     assert result is dummy_mixer
