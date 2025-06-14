@@ -26,6 +26,7 @@ class DummyLogger:
         self.infos = []
         self.errors = []
         self.exceptions = []
+        self.warnings = []
 
     def info(self, msg, *args, **kwargs):
         self.infos.append((msg, args))
@@ -35,6 +36,9 @@ class DummyLogger:
 
     def exception(self, msg, *args, **kwargs):
         self.exceptions.append((msg, args))
+
+    def warning(self, msg, *args, **kwargs):
+        self.warnings.append((msg, args))
 
 
 @pytest.fixture(autouse=True)
@@ -187,9 +191,7 @@ async def test_play_next_play_youtube_raises(dummy_logger, monkeypatch):
         async def play_youtube(self, *_):
             raise RuntimeError("play error")
 
-    mixer = Mixer()
-    monkeypatch.setattr(ytj, "ensure_mixer", lambda vc: mixer)
-
+    monkeypatch.setattr(ytj, "ensure_mixer", lambda vc: Mixer())
     await ytj._play_next(vc)
 
     # Queue should be cleared
@@ -262,6 +264,7 @@ async def test_list_queue_with_items():
     result = await ytj.list_queue(vc)
     assert result == ["x", "y"]
 
+
 @pytest.mark.asyncio
 async def test_stop_success(monkeypatch, dummy_logger):
     vc = DummyVC(guild_id=60)
@@ -286,6 +289,7 @@ async def test_stop_success(monkeypatch, dummy_logger):
     assert 60 not in ytj.youtube_queue
     assert dummy_logger.exceptions, "Expected exception log on pause failure"
 
+
 @pytest.mark.asyncio
 async def test_stop_stop_raises(monkeypatch, dummy_logger):
     vc = DummyVC(guild_id=61)
@@ -305,3 +309,100 @@ async def test_stop_stop_raises(monkeypatch, dummy_logger):
     # queue cleared despite clear_tracks exception
     assert 61 not in ytj.youtube_queue
     assert dummy_logger.exceptions, "Expected exception log on clear_tracks failure"
+
+
+@pytest.mark.asyncio
+async def test_maybe_preload_skips_cached(monkeypatch, dummy_logger):
+    vc = DummyVC(guild_id=70)
+    queue = ["url1", "url2", "url3"]
+    class Mixer:
+        SAMPLE_RATE = 48000
+        CHANNELS = 2
+    mixer = Mixer()
+    monkeypatch.setattr(ytj, "ensure_mixer", lambda vc: mixer)
+    class Path:
+        def __init__(self, exists): self._exists = exists
+        def exists(self): return self._exists
+    cache_map = {"url2": Path(True), "url3": Path(True)}
+    monkeypatch.setattr(ytj, "get_cache_path", lambda url, sr, ch: cache_map.get(url, Path(False)))
+    recorded = []
+    async def fake_run(executor, func, url, opus_tmp, pcm_tmp, cache_path, sr, ch):
+        recorded.append(url)
+    vc.loop.run_in_executor = fake_run
+    await ytj._maybe_preload_next_tracks(vc, queue)
+    assert recorded == []
+
+
+@pytest.mark.asyncio
+async def test_maybe_preload_download_and_remove_on_failure(monkeypatch, dummy_logger):
+    vc = DummyVC(guild_id=71)
+    queue = ["url1", "url2", "url3"]
+    class Mixer:
+        SAMPLE_RATE = 44100
+        CHANNELS = 1
+    mixer = Mixer()
+    monkeypatch.setattr(ytj, "ensure_mixer", lambda vc: mixer)
+    monkeypatch.setattr(ytj, "get_cache_path", lambda url, sr, ch: type("P", (), {"exists": lambda self: False})())
+    monkeypatch.setattr(ytj, "get_temp_paths", lambda url: ("opus_tmp", "pcm_tmp"))
+    recorded = []
+    async def fake_run(executor, func, url, opus_tmp, pcm_tmp, cache_path, sr, ch):
+        if url == "url2":
+            raise Exception("fail")
+        recorded.append(url)
+    vc.loop.run_in_executor = fake_run
+    await ytj._maybe_preload_next_tracks(vc, queue)
+    assert "url2" not in queue
+    assert "url3" in recorded
+
+
+@pytest.mark.asyncio
+async def test_create_before_after_functions_before_and_after(monkeypatch, dummy_logger):
+    vc = DummyVC(guild_id=80)
+    url1, url2 = "yt://1", "yt://2"
+    ytj.youtube_queue[80] = [url1, url2]
+    class TextChannel:
+        def __init__(self): self.sent = []
+        def send(self, content):
+            self.sent.append(content)
+            return asyncio.sleep(0)
+    channel = TextChannel()
+    vc.guild.get_channel = lambda id: channel
+    ytj.video_metadata.clear()
+    ytj.video_metadata[url1] = {"title": "Title1", "url": "http://u1"}
+    calls = []
+    vc.loop.create_task = lambda coro: calls.append(coro) or asyncio.sleep(0)
+    before_play, after_play = ytj.create_before_after_functions(url1, vc, text_channel=100)
+    before_play()
+    assert channel.sent and "Now playing" in channel.sent[0]
+    before_calls = len(calls)
+    after_play()
+    assert ytj.youtube_queue[80] == [url2]
+    assert len(calls) > before_calls
+
+
+@pytest.mark.asyncio
+async def test_after_play_finishes_queue(monkeypatch, dummy_logger):
+    vc = DummyVC(guild_id=81)
+    url = "yt://finish"
+    ytj.youtube_queue[81] = [url]
+    class TextChannel:
+        def __init__(self): self.sent = []
+        def send(self, content):
+            self.sent.append(content)
+            return asyncio.sleep(0)
+    channel = TextChannel()
+    vc.guild.get_channel = lambda id: channel
+    calls = []
+    vc.loop.create_task = lambda coro: calls.append(coro) or asyncio.sleep(0)
+    _, after_play = ytj.create_before_after_functions(url, vc, text_channel=200)
+    after_play()
+    assert 81 not in ytj.youtube_queue
+    assert channel.sent and "Finished playing queue" in channel.sent[0]
+
+
+def test_before_after_no_text_channel(dummy_logger):
+    vc = DummyVC(guild_id=90)
+    ytj.youtube_queue[90] = ["u"]
+    before_play, after_play = ytj.create_before_after_functions("u", vc, text_channel=None)
+    before_play()
+    after_play()
