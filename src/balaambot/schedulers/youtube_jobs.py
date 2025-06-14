@@ -5,7 +5,10 @@ from discord.channel import CategoryChannel, ForumChannel
 
 from balaambot import discord_utils, utils
 from balaambot.audio_handlers.multi_audio_source import ensure_mixer
-from balaambot.audio_handlers.youtube_audio import video_metadata
+from balaambot.audio_handlers.youtube_audio import (
+    get_youtube_track_metadata,
+    video_metadata,
+)
 from balaambot.audio_handlers.youtube_utils import get_cache_path, get_temp_paths
 from balaambot.schedulers.youtube_download_worker import download_and_convert
 
@@ -76,10 +79,10 @@ async def _maybe_preload_next_tracks(
             try:
                 queue.remove(url)
                 logger.warning("Removed %s from queue due to pre-download failure", url)
-                # Try fetching again
+                # Try fetching again, since the queue changed
                 await _maybe_preload_next_tracks(vc, queue, foresight)
             except ValueError:
-                pass  # Already removed or not present
+                pass  # failed to remove is the only error this can catch, I think?
 
 
 def create_before_after_functions(
@@ -96,6 +99,11 @@ def create_before_after_functions(
         logger.info("Starting playback for %s", url)
         if text_channel is not None:
             channel = vc.guild.get_channel(text_channel)
+            logger.info(
+                "Sending a playback started message to channel '%s' (instance of %s)",
+                channel,
+                type(channel),
+            )
             if channel is not None and not isinstance(
                 channel, (ForumChannel, CategoryChannel)
             ):
@@ -104,6 +112,7 @@ def create_before_after_functions(
                 if track:
                     content = f"▶️    Now playing **[{track['title']}]({track['url']})**"
 
+                logger.info("Sending message: '%s'", content)
                 job = channel.send(content=content)
                 vc.loop.create_task(job)
 
@@ -149,6 +158,9 @@ async def _play_next(
 
     url = queue[0]
     logger.info("Starting playback of %s for guild_id=%s", url, vc.guild.id)
+
+    # TODO: This should be done before now, probably
+    await get_youtube_track_metadata(url)
 
     _before_play, _after_play = create_before_after_functions(url, vc, text_channel)
 

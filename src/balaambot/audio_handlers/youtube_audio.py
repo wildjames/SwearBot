@@ -47,7 +47,10 @@ async def get_youtube_track_metadata(url: str) -> VideoMetadata | None:
 
     # return cached metadata if available
     if url in video_metadata:
+        logger.info("Returning cached track metadata for '%s'", url)
         return video_metadata[url]
+
+    logger.info("Fetching track metadata, but not already cached. URL: '%s'", url)
 
     ydl_opts = {
         "quiet": True,

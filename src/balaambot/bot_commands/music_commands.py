@@ -169,11 +169,14 @@ class MusicCommands(commands.Cog):
             )
 
         # Enqueue all tracks and start background fetches
+        # TODO: Also fetch the track metadata here too.
+        # promises = []
         for track_url in track_urls:
             # These have to be awaited, to preserve order.
             await youtube_jobs.add_to_queue(
                 vc, track_url, text_channel=interaction.channel_id
             )
+            # promises.append(youtube_audio.get_youtube_track_metadata(track_url))
 
         # Confirmation message
         await interaction.followup.send(
