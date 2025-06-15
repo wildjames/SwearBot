@@ -253,7 +253,7 @@ class MusicCommands(commands.Cog):
 
                 if (
                     sum([len(s) for s in lines]) + len(new_line) + 100
-                    > discord_utils.MAX__MESSAGE_LENGTH
+                    < discord_utils.MAX__MESSAGE_LENGTH
                 ):
                     lines.append(new_line)
 

@@ -4,7 +4,6 @@ from collections.abc import Callable
 from discord.channel import CategoryChannel, ForumChannel
 
 from balaambot import discord_utils, utils
-from balaambot.audio_handlers.multi_audio_source import ensure_mixer
 from balaambot.audio_handlers.youtube_audio import (
     get_youtube_track_metadata,
     video_metadata,
@@ -63,7 +62,7 @@ async def _maybe_preload_next_tracks(
         logger.info("  - Caching %s", url)
 
     for url in upcoming:
-        mixer = ensure_mixer(vc)
+        mixer = discord_utils.get_mixer_from_voice_client(vc)
 
         cache_path = get_cache_path(url, mixer.SAMPLE_RATE, mixer.CHANNELS)
         if cache_path.exists():
@@ -172,7 +171,7 @@ async def _play_next(
     _before_play, _after_play = create_before_after_functions(url, vc, text_channel)
 
     try:
-        mixer = ensure_mixer(vc)
+        mixer = discord_utils.get_mixer_from_voice_client(vc)
         await mixer.play_youtube(url, before_play=_before_play, after_play=_after_play)
         # After transmitting silence, discord stops calling the read() method.
         # So, we need to call the play method again to get it going again.
@@ -196,7 +195,7 @@ def get_current_track(vc: discord_utils.DISCORD_VOICE_CLIENT) -> str | None:
 
 async def skip(vc: discord_utils.DISCORD_VOICE_CLIENT) -> None:
     """Skip the current track and play the next in queue."""
-    mixer = ensure_mixer(vc)
+    mixer = discord_utils.get_mixer_from_voice_client(vc)
     try:
         # This triggers the after_play callback which will handle the next track
         logger.info("Skipping current track for guild_id=%s", vc.guild.id)
@@ -221,7 +220,7 @@ async def list_queue(vc: discord_utils.DISCORD_VOICE_CLIENT) -> list[str]:
 async def stop(vc: discord_utils.DISCORD_VOICE_CLIENT) -> None:
     """Stop playback and clear the queue."""
     # Stop current playback
-    mixer = ensure_mixer(vc)
+    mixer = discord_utils.get_mixer_from_voice_client(vc)
     try:
         mixer.clear_tracks()
         mixer.pause()
