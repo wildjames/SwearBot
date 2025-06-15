@@ -6,9 +6,10 @@ from discord import Client, InteractionCallbackResponse, app_commands
 from discord.ext import commands
 from discord.ui import Button, View
 
-from balaambot import discord_utils, utils
-from balaambot.audio_handlers import youtube_audio, youtube_utils
-from balaambot.schedulers import youtube_jobs
+from balaambot import discord_utils
+from balaambot.utils import sec_to_string
+from balaambot.youtube import utils as yt_utils
+from balaambot.youtube import youtube_audio, youtube_jobs
 
 logger = logging.getLogger(__name__)
 
@@ -80,13 +81,13 @@ class MusicCommands(commands.Cog):
         query = query.strip()
 
         # Handle playlist URLs
-        if youtube_utils.is_valid_youtube_playlist(query):
+        if yt_utils.is_valid_youtube_playlist(query):
             logger.info("Received play command for playlist URL: '%s'", query)
             self.bot.loop.create_task(self.do_play_playlist(interaction, query))
             return
 
         # Handle youtube videos
-        if youtube_utils.is_valid_youtube_url(query):
+        if yt_utils.is_valid_youtube_url(query):
             logger.info("Received play command for URL: '%s'", query)
             self.bot.loop.create_task(self.do_play(interaction, query))
             return
@@ -129,7 +130,7 @@ class MusicCommands(commands.Cog):
         # Build a text block describing each result line by line
         lines: list[str] = []
         for idx, (_, title, duration_secs) in enumerate(results):
-            duration_str = utils.sec_to_string(duration_secs)
+            duration_str = sec_to_string(duration_secs)
             lines.append(f"**{idx + 1}.** {title} ({duration_str})")
 
         description = (
@@ -162,14 +163,11 @@ class MusicCommands(commands.Cog):
             )
 
         # Enqueue all tracks and start background fetches
-        # TODO: Also fetch the track metadata here too.
-        # promises = []
         for track_url in track_urls:
             # These have to be awaited, to preserve order.
             await youtube_jobs.add_to_queue(
                 vc, track_url, text_channel=interaction.channel_id
             )
-            # promises.append(youtube_audio.get_youtube_track_metadata(track_url))
 
         # Confirmation message
         await interaction.followup.send(
@@ -269,7 +267,7 @@ class MusicCommands(commands.Cog):
             msg = "**Upcoming tracks:**\n" + "\n".join(lines)
 
             # format runtime as H:MM:SS or M:SS
-            total_runtime_str = utils.sec_to_string(total_runtime)
+            total_runtime_str = sec_to_string(total_runtime)
             msg += f"\n\n🔮    Total runtime: {total_runtime_str}"
 
         await interaction.followup.send(msg, ephemeral=True)

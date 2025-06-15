@@ -2,16 +2,17 @@
 
 These are smaller jobs, that shouldn't take too long to knock down individually.
 
-- [ ] Refactor the video metadata to store metadata in a json file, and retrieve from there. Then, get the metadata in a subprocess whenever something is added to the queue.
-  - [ ] Really, this should be a cache of some kind. Redis probably, but it's a lot of effort and I'm not sure the juice is worth the squeeze just for this.
 - [ ] Add a cronjob to remove cached audio files that are over a week old
-- [ ] When the bot sends a message with a youtube video in it, it should contain a link to the video
 - [ ] too many sounds in the zip. /list_sfx gives an error because it hits the message limit
 - [ ] check if sfx file exists before running it and joining channel
 - [ ] sanitize sfx file names and find files with similar names
 - [ ] Bots should be segregated into their own dev channels on the dev server
+- [ ] Refactor the video metadata
+  - [x] Store metadata in a json file, and retrieve from there. Then, get the metadata in a subprocess whenever something is added to the queue.
+  - [ ] Really, this should be a cache of some kind. Redis probably, but it's a lot of effort and I'm not sure the juice is worth the squeeze just for this.
+- [x] When the bot sends a message with a youtube video in it, it should contain a link to the video
 - [x] check user is in voice channel before searching for tracks
-- [x] The `youtube_audio` script is getting too large, and has a lot of metadata stuff in it. Split it into `youtube_utils.py` and `youtube_audio.py`.
+- [x] The `youtube_audio` script is getting too large, and has a lot of metadata stuff in it. Split it into `utils.py` and `youtube_audio.py`.
 - [x] Optimise the docker containers
   - [x] Update the dockerfiles to pull the sounds zip and unpack it only during the running phase, rather than packing it into the built image
   - [x] Deployment docker container doesnt use a builder phase
@@ -29,7 +30,6 @@ These are things that will likely take over an hour
 
 - [x] Some things are not async enough, it seems. Downloading videos can cause playback to stutter. Break out the downloading logic to multithreading/processing?
   - [ ] tentatively solved. Needs thorough testing though
-- [ ] When adding a lot of songs to the queue, don't download them all in advance. Only download the current track, and the next one.
 - [ ] Should we stream opus data rather than PCM?
 - [ ] Youtube age restricts some content, so I need to implement auth
 - [ ] Commands need to have guard clauses abstracted out into some discord utility functions
@@ -37,6 +37,7 @@ These are things that will likely take over an hour
 - [ ] Separate and optimize CI pipelines more
   - [x] Separate the CI pipeline and use the dedicated pipelines instead
   - [ ] Speed up docker builds - make sure caching is working properly
+- [x] When adding a lot of songs to the queue, don't download them all in advance. Only download the current track, and the next one.
 - [x] Send a message when a new track starts to play
 - [x] Allow users to search youtube for videos
 - [x] Youtube playlist support

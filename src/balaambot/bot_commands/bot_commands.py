@@ -4,8 +4,9 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from balaambot import discord_utils
-from balaambot.schedulers import audio_sfx_jobs, youtube_jobs
+from balaambot.discord_utils import ensure_connected
+from balaambot.sfx.audio_sfx_jobs import stop_all_jobs as sfx_stop
+from balaambot.youtube.youtube_jobs import stop as yt_stop
 
 logger = logging.getLogger(__name__)
 
@@ -40,12 +41,10 @@ class BotControlCommands(commands.Cog):
                 ephemeral=True,
             )
             return
-        vc = await discord_utils.ensure_connected(
-            interaction.guild, member.voice.channel
-        )
+        vc = await ensure_connected(interaction.guild, member.voice.channel)
 
-        await audio_sfx_jobs.stop_all_jobs(vc)
-        await youtube_jobs.stop(vc)
+        await sfx_stop(vc)
+        await yt_stop(vc)
 
         await vc.disconnect(force=True)
 

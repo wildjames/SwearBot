@@ -1,35 +1,26 @@
 import pytest
 import asyncio
+import json
 from pathlib import Path
 from yt_dlp import DownloadError
 
 import balaambot.utils as utils
-# Adjust import path below to match your module's filename
-import balaambot.audio_handlers.youtube_audio as handler
+import balaambot.youtube.youtube_audio as handler
 
 pytestmark = pytest.mark.asyncio
 
 @ pytest.fixture(autouse=True)
 def clear_state():
     # Clear cached metadata and locks before each test
-    handler.video_metadata.clear()
     handler._download_locks.clear()
     yield
-    handler.video_metadata.clear()
     handler._download_locks.clear()
 
 # Tests for get_youtube_track_metadata
 async def test_invalid_url(monkeypatch):
     monkeypatch.setattr(handler, 'is_valid_youtube_url', lambda url: False)
-    result = await handler.get_youtube_track_metadata('bad_url')
-    assert result is None
-
-async def test_cached_metadata(monkeypatch):
-    monkeypatch.setattr(handler, 'is_valid_youtube_url', lambda url: True)
-    cached = handler.VideoMetadata(url='u', title='t', runtime=5, runtime_str='0:05')
-    handler.video_metadata['u'] = cached
-    result = await handler.get_youtube_track_metadata('u')
-    assert result is cached
+    with pytest.raises(ValueError):
+        await handler.get_youtube_track_metadata('bad_url')
 
 async def test_download_error(monkeypatch):
     monkeypatch.setattr(handler, 'is_valid_youtube_url', lambda url: True)
@@ -38,8 +29,8 @@ async def test_download_error(monkeypatch):
         def __exit__(self, *args): return False
         def extract_info(self, url, download): raise DownloadError('fail')
     monkeypatch.setattr(handler, 'YoutubeDL', lambda opts: DummyYDL())
-    result = await handler.get_youtube_track_metadata('u')
-    assert result is None
+    with pytest.raises(DownloadError):
+        await handler.get_youtube_track_metadata('u')
 
 async def test_unexpected_exception(monkeypatch):
     monkeypatch.setattr(handler, 'is_valid_youtube_url', lambda url: True)
@@ -48,10 +39,11 @@ async def test_unexpected_exception(monkeypatch):
         def __exit__(self, *args): return False
         def extract_info(self, url, download): raise ValueError('boom')
     monkeypatch.setattr(handler, 'YoutubeDL', lambda opts: DummyYDL())
-    result = await handler.get_youtube_track_metadata('u')
-    assert result is None
+    with pytest.raises(ValueError):
+        await handler.get_youtube_track_metadata('u')
 
-async def test_successful_metadata(monkeypatch):
+async def test_successful_metadata(monkeypatch, tmp_path):
+    # Test that metadata is fetched and cached
     monkeypatch.setattr(handler, 'is_valid_youtube_url', lambda url: True)
     info = {'title': 'My Video', 'duration': 123}
     class DummyYDL:
@@ -60,9 +52,58 @@ async def test_successful_metadata(monkeypatch):
         def extract_info(self, url, download): return info
     monkeypatch.setattr(handler, 'YoutubeDL', lambda opts: DummyYDL())
     monkeypatch.setattr(utils, 'sec_to_string', lambda s: '2:03')
+
+    # Override metadata path to tmp
+    meta_path = tmp_path / 'meta.json'
+    monkeypatch.setattr(handler, 'get_metadata_path', lambda u: meta_path)
     result = await handler.get_youtube_track_metadata('url1')
     assert result == {'url': 'url1', 'title': 'My Video', 'runtime': 123, 'runtime_str': '2:03'}
-    assert handler.video_metadata['url1'] == result
+    # Ensure cache file is created
+    assert meta_path.exists()
+
+async def test_metadata_cache_hit(monkeypatch, tmp_path):
+    # Test returning metadata from existing cache
+    data = {'url': 'u', 'title': 't', 'runtime': 1, 'runtime_str': '0:01'}
+    cache_file = tmp_path / 'meta.json'
+    cache_file.write_text(json.dumps(data), encoding='utf-8')
+    monkeypatch.setattr(handler, 'is_valid_youtube_url', lambda url: True)
+    monkeypatch.setattr(handler, 'get_metadata_path', lambda u: cache_file)
+    # Should return without invoking YoutubeDL
+    called = {'dl': False}
+    monkeypatch.setattr(handler, 'YoutubeDL', lambda opts: (_ for _ in ()).throw(RuntimeError("Shouldn't be called")))
+    result = await handler.get_youtube_track_metadata('u')
+    assert result == data
+
+async def test_metadata_defaults(monkeypatch, tmp_path):
+    # Test default title and duration
+    monkeypatch.setattr(handler, 'is_valid_youtube_url', lambda url: True)
+    meta_path = tmp_path / 'meta.json'
+    monkeypatch.setattr(handler, 'get_metadata_path', lambda u: meta_path)
+    class DummyYDL:
+        def __enter__(self): return self
+        def __exit__(self, *args): return False
+        def extract_info(self, url, download): return {}
+    monkeypatch.setattr(handler, 'YoutubeDL', lambda opts: DummyYDL())
+    monkeypatch.setattr(utils, 'sec_to_string', lambda s: '0:00')
+    result = await handler.get_youtube_track_metadata('u')
+    assert result['title'] == 'u'
+    assert result['runtime'] == 0
+    assert result['runtime_str'] == '0:00'
+
+# Tests for fetch_cached_youtube_track_metadata
+def test_fetch_cached_metadata_success(monkeypatch, tmp_path):
+    data = {'url': 'u', 'title': 't', 'runtime': 1, 'runtime_str': '0:01'}
+    meta_file = tmp_path / 'meta.json'
+    meta_file.write_text(json.dumps(data), encoding='utf-8')
+    monkeypatch.setattr(handler, 'get_metadata_path', lambda u: meta_file)
+    result = handler.fetch_cached_youtube_track_metadata('u')
+    assert result == data
+
+def test_fetch_cached_metadata_missing(monkeypatch):
+    from pathlib import Path
+    monkeypatch.setattr(handler, 'get_metadata_path', lambda u: Path('/nonexistent'))
+    with pytest.raises(FileNotFoundError):
+        handler.fetch_cached_youtube_track_metadata('u')
 
 # Tests for fetch_audio_pcm
 async def test_fetch_audio_cache_hit(monkeypatch, tmp_path):
@@ -104,6 +145,27 @@ async def test_fetch_audio_success(monkeypatch, tmp_path):
     result = await handler.fetch_audio_pcm('u')
     assert result == cache
 
+# Tests for _sync_download
+def test_sync_download_success(monkeypatch):
+    called = {}
+    class DummyYDL:
+        def __init__(self, opts): called['opts'] = opts
+        def download(self, urls): called['urls'] = urls
+    monkeypatch.setattr(handler, 'YoutubeDL', DummyYDL)
+    opts = {'format': 'bestaudio'}
+    url = 'https://youtu.be/test'
+    handler._sync_download(opts, url)
+    assert called['opts'] is opts
+    assert called['urls'] == [url]
+
+def test_sync_download_propagates_error(monkeypatch):
+    class DummyYDL:
+        def __init__(self, opts): pass
+        def download(self, urls): raise DownloadError('dl fail')
+    monkeypatch.setattr(handler, 'YoutubeDL', DummyYDL)
+    with pytest.raises(DownloadError):
+        handler._sync_download({'a': 1}, 'u')
+
 # Tests for _download_opus
 async def test_download_opus_failure(monkeypatch, tmp_path):
     url = 'u'
@@ -117,28 +179,18 @@ async def test_download_opus_failure(monkeypatch, tmp_path):
     assert 'yt-dlp failed to produce' in str(ei.value)
 
 async def test_download_opus_success(monkeypatch, tmp_path):
-    url = "u"
-    opus_tmp = tmp_path / "file"
-
-    # Stub out the new synchronous downloader to write a dummy .opus file
-    def fake_sync_download(opts, target_url) -> None:
-        outtmpl = opts["outtmpl"]
-        # the real code will append ".opus" to this
-        opus_file = Path(f"{outtmpl}.opus")
-        opus_file.parent.mkdir(parents=True, exist_ok=True)
-        opus_file.write_bytes(b"dummy opus data")
-
-    # Patch the helper so that run_in_executor just calls our fake
-    monkeypatch.setattr(handler, "_sync_download", fake_sync_download)
-    monkeypatch.setattr(handler.utils, "FUTURES_EXECUTOR", None)
-
-    # Now run the async download – it should create file.opus and then rename it to file
+    url = 'u'
+    opus_tmp = tmp_path / 'file'
+    # Fake download writes .opus
+    def fake_sync_download(opts, target_url):
+        outtmpl = opts['outtmpl']
+        path = Path(f"{outtmpl}.opus")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"dummy")
+    monkeypatch.setattr(handler, '_sync_download', fake_sync_download)
+    monkeypatch.setattr(handler.utils, 'FUTURES_EXECUTOR', None)
     await handler._download_opus(url, opus_tmp)
-
-    # Assert that the final opus_tmp (no extension) exists
-    assert opus_tmp.exists()
-    # And that it’s non-empty
-    assert opus_tmp.read_bytes() == b"dummy opus data"
+    assert opus_tmp.exists() and opus_tmp.read_bytes() == b"dummy"
 
 # Tests for _convert_opus_to_pcm
 async def test_convert_opus_to_pcm_failure(monkeypatch, tmp_path):
@@ -149,8 +201,7 @@ async def test_convert_opus_to_pcm_failure(monkeypatch, tmp_path):
     class DummyProcess:
         def __init__(self): self.returncode = 1
         async def communicate(self): return (b'', b'err')
-    async def fake_exec(*args, **kwargs): return DummyProcess()
-    monkeypatch.setattr(asyncio, 'create_subprocess_exec', fake_exec)
+    monkeypatch.setattr(asyncio, 'create_subprocess_exec', lambda *a, **k: DummyProcess())
     with pytest.raises(RuntimeError) as ei:
         await handler._convert_opus_to_pcm(opus_tmp, pcm_tmp, cache, 8000, 1)
     assert 'ffmpeg failed:' in str(ei.value)
@@ -164,8 +215,7 @@ async def test_convert_opus_to_pcm_success(monkeypatch, tmp_path):
     class DummyProcess:
         def __init__(self): self.returncode = 0
         async def communicate(self): return (b'', b'')
-    async def fake_exec(*args, **kwargs): return DummyProcess()
-    monkeypatch.setattr(asyncio, 'create_subprocess_exec', fake_exec)
+    monkeypatch.setattr(asyncio, 'create_subprocess_exec', lambda *a, **k: DummyProcess())
     await handler._convert_opus_to_pcm(opus_tmp, pcm_tmp, cache, 16000, 2)
     assert not opus_tmp.exists()
     assert cache.exists()
@@ -206,16 +256,30 @@ async def test_playlist_info_none(monkeypatch):
     with pytest.raises(TypeError):
         await handler.get_playlist_video_urls('u')
 
-async def test_playlist_entries(monkeypatch):
+async def test_playlist_valid(monkeypatch):
+    # Test valid playlist extraction and metadata side-effects
+    playlist_url = 'pl'
     monkeypatch.setattr(handler, 'check_is_playlist', lambda u: True)
-    entries = [{'id': '123'}, {'noid': 'x'}, {'id': None}, {'id': 'xyz'}]
-    class DummyYDL:
-        def __enter__(self): return self
-        def __exit__(self, *args): return False
-        def extract_info(self, u, download): return {'entries': entries}
-    monkeypatch.setattr(handler, 'YoutubeDL', lambda opts: DummyYDL())
-    result = await handler.get_playlist_video_urls('u')
-    assert result == ['https://www.youtube.com/watch?v=123', 'https://www.youtube.com/watch?v=xyz']
+    entries = [
+        {'id': 'id1'},
+        {'id': None},
+        {'id': 'id2'},
+    ]
+    info = {'entries': entries}
+    # Stub thread call to return our info
+    async def fake_to_thread(func, opts, url):
+        return info
+    monkeypatch.setattr(asyncio, 'to_thread', fake_to_thread)
+    # Capture calls to extract_metadata
+    called = []
+    monkeypatch.setattr(handler, 'extract_metadata', lambda entry: called.append(entry))
+    result = await handler.get_playlist_video_urls(playlist_url)
+    assert result == [
+        'https://www.youtube.com/watch?v=id1',
+        'https://www.youtube.com/watch?v=id2',
+    ]
+    # Ensure extract_metadata called for each non-null entry
+    assert called == [entries[0], entries[2]]
 
 # Tests for search_youtube
 async def test_search_download_error(monkeypatch):
@@ -251,26 +315,3 @@ async def test_search_valid(monkeypatch):
         ('https://www.youtube.com/watch?v=1', 'A', 10),
         ('https://www.youtube.com/watch?v=3', 'D', 15),
     ]
-
-# Tests for the new _sync_download helper
-def test_sync_download_success(monkeypatch):
-    called = {}
-    class DummyYDL:
-        def __init__(self, opts):
-            called['opts'] = opts
-        def download(self, urls):
-            called['urls'] = urls
-    monkeypatch.setattr(handler, 'YoutubeDL', DummyYDL)
-    opts = {'format': 'bestaudio'}
-    url = 'https://youtu.be/test'
-    handler._sync_download(opts, url)
-    assert called['opts'] is opts
-    assert called['urls'] == [url]
-
-def test_sync_download_propagates_error(monkeypatch):
-    class DummyYDL:
-        def __init__(self, opts): pass
-        def download(self, urls): raise DownloadError('dl fail')
-    monkeypatch.setattr(handler, 'YoutubeDL', DummyYDL)
-    with pytest.raises(DownloadError):
-        handler._sync_download({'a': 1}, 'u')
