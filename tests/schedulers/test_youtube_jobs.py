@@ -153,7 +153,7 @@ async def test_play_next_success(monkeypatch, dummy_logger):
     dummy_mixer = DummyMixer()
 
     # Patch ensure_mixer to return our dummy
-    monkeypatch.setattr(ytj, "ensure_mixer", lambda vc: dummy_mixer)
+    monkeypatch.setattr(discord_utils, "ensure_mixer", lambda vc: dummy_mixer)
 
     # Run play_next
     await ytj._play_next(vc)
@@ -171,7 +171,7 @@ async def test_play_next_mixer_failure(dummy_logger, monkeypatch):
     def bad_mixer(vc):
         raise RuntimeError("mixer bad")
 
-    monkeypatch.setattr(ytj, "ensure_mixer", bad_mixer)
+    monkeypatch.setattr(discord_utils, "ensure_mixer", bad_mixer)
 
     await ytj._play_next(vc)
 
@@ -191,7 +191,7 @@ async def test_play_next_play_youtube_raises(dummy_logger, monkeypatch):
         async def play_youtube(self, *_):
             raise RuntimeError("play error")
 
-    monkeypatch.setattr(ytj, "ensure_mixer", lambda vc: Mixer())
+    monkeypatch.setattr(discord_utils, "ensure_mixer", lambda vc: Mixer())
     await ytj._play_next(vc)
 
     # Queue should be cleared
@@ -223,7 +223,7 @@ async def test_skip_success(monkeypatch, dummy_logger):
 
     mixer = Mixer()
     # Patch ensure_mixer to return our mixer
-    monkeypatch.setattr(ytj, "ensure_mixer", lambda vc: mixer)
+    monkeypatch.setattr(discord_utils, "ensure_mixer", lambda vc: mixer)
 
     await ytj.skip(vc)
     assert mixer.skipped
@@ -238,7 +238,7 @@ async def test_skip_raises(monkeypatch, dummy_logger):
             raise RuntimeError("skip fail")
 
     mixer = Mixer()
-    monkeypatch.setattr(ytj, "ensure_mixer", lambda vc: mixer)
+    monkeypatch.setattr(discord_utils, "ensure_mixer", lambda vc: mixer)
 
     await ytj.skip(vc)
     assert dummy_logger.exceptions, "Expected exception log on skip failure"
@@ -282,7 +282,7 @@ async def test_stop_success(monkeypatch, dummy_logger):
             raise RuntimeError("pause fail")
 
     mixer = Mixer()
-    monkeypatch.setattr(ytj, "ensure_mixer", lambda vc: mixer)
+    monkeypatch.setattr(discord_utils, "ensure_mixer", lambda vc: mixer)
 
     await ytj.stop(vc)
     assert mixer.stopped
@@ -303,7 +303,7 @@ async def test_stop_stop_raises(monkeypatch, dummy_logger):
             pass
 
     mixer = Mixer()
-    monkeypatch.setattr(ytj, "ensure_mixer", lambda vc: mixer)
+    monkeypatch.setattr(discord_utils, "ensure_mixer", lambda vc: mixer)
 
     await ytj.stop(vc)
     # queue cleared despite clear_tracks exception
@@ -319,7 +319,7 @@ async def test_maybe_preload_skips_cached(monkeypatch, dummy_logger):
         SAMPLE_RATE = 48000
         CHANNELS = 2
     mixer = Mixer()
-    monkeypatch.setattr(ytj, "ensure_mixer", lambda vc: mixer)
+    monkeypatch.setattr(discord_utils, "ensure_mixer", lambda vc: mixer)
     class Path:
         def __init__(self, exists): self._exists = exists
         def exists(self): return self._exists
@@ -341,7 +341,7 @@ async def test_maybe_preload_download_and_remove_on_failure(monkeypatch, dummy_l
         SAMPLE_RATE = 44100
         CHANNELS = 1
     mixer = Mixer()
-    monkeypatch.setattr(ytj, "ensure_mixer", lambda vc: mixer)
+    monkeypatch.setattr(discord_utils, "ensure_mixer", lambda vc: mixer)
     monkeypatch.setattr(ytj, "get_cache_path", lambda url, sr, ch: type("P", (), {"exists": lambda self: False})())
     monkeypatch.setattr(ytj, "get_temp_paths", lambda url: ("opus_tmp", "pcm_tmp"))
     recorded = []
