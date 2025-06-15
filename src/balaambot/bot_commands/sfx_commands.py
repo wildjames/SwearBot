@@ -149,7 +149,7 @@ class SFXCommands(commands.Cog):
     )
     async def trigger_sfx(self, interaction: discord.Interaction) -> None:
         """Play a random sound effect in the voice channel."""
-        await interaction.response.defer(thinking=True)
+        await interaction.response.defer(thinking=True, ephemeral=True)
         if interaction.guild is None:
             await interaction.followup.send(
                 "This command can only be used in a server.", ephemeral=True
