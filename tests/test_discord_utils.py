@@ -3,15 +3,25 @@ import pytest
 
 from balaambot import discord_utils
 from balaambot.discord_utils import (
+    ensure_connected,
     get_mixer_from_interaction,
     get_mixer_from_voice_client,
+    get_voice_channel_mixer,
 )
 
 # --- Dummy classes to simulate discord.py objects ---
 
 
 class DummyVoiceClient:
-    pass
+    def __init__(self, channel=None):
+        self.channel = channel
+        self._disconnected = False
+
+    def is_connected(self):
+        return not self._disconnected
+
+    async def disconnect(self):
+        self._disconnected = True
 
 
 class DummyMixer:
@@ -22,7 +32,8 @@ class DummyChannel:
     def __init__(self, vc):
         self._vc = vc
 
-    async def connect(self, cls=DummyVoiceClient):
+    async def connect(self, cls=None):
+        # ignore cls, just return dummy vc
         return self._vc
 
 
@@ -68,8 +79,74 @@ class DummyInteraction:
         self.followup = DummyFollowup()
 
 
-# --- Tests for get_mixer_from_interaction ---
+# ---------------------------------------------------------------------------
+# Tests for ensure_connected
+# ---------------------------------------------------------------------------
 
+@pytest.mark.asyncio
+async def test_ensure_connected_no_existing_vc(monkeypatch):
+    # guild.voice_client = None, so should call channel.connect
+    vc = DummyVoiceClient()
+    channel = DummyChannel(vc)
+    guild = DummyGuild(voice_client=None)
+
+    # monkey‐patch DISCORD_VOICE_CLIENT to accept DummyVoiceClient
+    monkeypatch.setattr(discord_utils, "DISCORD_VOICE_CLIENT", DummyVoiceClient)
+
+    returned = await ensure_connected(guild, channel)
+    assert returned is vc
+
+
+@pytest.mark.asyncio
+async def test_ensure_connected_wrong_type_reconnects(monkeypatch):
+    # guild.voice_client exists but not instance of DISCORD_VOICE_CLIENT, so reconnect
+    wrong_vc = object()
+    new_vc = DummyVoiceClient()
+    channel = DummyChannel(new_vc)
+    guild = DummyGuild(voice_client=wrong_vc)
+
+    monkeypatch.setattr(discord_utils, "DISCORD_VOICE_CLIENT", DummyVoiceClient)
+
+    returned = await ensure_connected(guild, channel)
+    assert returned is new_vc
+
+
+@pytest.mark.asyncio
+async def test_ensure_connected_already_connected_same_channel(monkeypatch):
+    # guild.voice_client is correct type, connected, and on same channel, so reuse
+    vc = DummyVoiceClient(channel="chan1")
+    # is_connected returns True by default
+    guild = DummyGuild(voice_client=vc)
+    channel = type("C", (), {"connect": None})()  # dummy, won't be called
+
+    monkeypatch.setattr(discord_utils, "DISCORD_VOICE_CLIENT", DummyVoiceClient)
+    # override channel just to compare by identity
+    vc.channel = channel
+
+    returned = await ensure_connected(guild, channel)
+    assert returned is vc
+
+
+@pytest.mark.asyncio
+async def test_ensure_connected_connected_diff_channel(monkeypatch):
+    # guild.voice_client is correct type and connected, but on a different channel, so disconnect & reconnect
+    old_vc = DummyVoiceClient(channel="old")
+    old_vc._disconnected = False
+    new_vc = DummyVoiceClient(channel="new")
+    channel = DummyChannel(new_vc)
+    guild = DummyGuild(voice_client=old_vc)
+
+    monkeypatch.setattr(discord_utils, "DISCORD_VOICE_CLIENT", DummyVoiceClient)
+
+    returned = await ensure_connected(guild, channel)
+    # old_vc should have been disconnected
+    assert old_vc._disconnected is True
+    assert returned is new_vc
+
+
+# ---------------------------------------------------------------------------
+# Existing tests for get_mixer_from_interaction
+# ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
 async def test_get_mixer_from_interaction_no_guild():
@@ -112,7 +189,7 @@ async def test_get_mixer_from_interaction_connects_and_returns_mixer(monkeypatch
     # Monkey‐patch ensure_mixer to return our DummyMixer
     dummy_mixer = DummyMixer()
 
-    async def fake_ensure(vcin):
+    def fake_ensure(vcin):
         return dummy_mixer
 
     monkeypatch.setattr(discord_utils, "ensure_mixer", fake_ensure)
@@ -128,7 +205,7 @@ async def test_get_mixer_from_interaction_failed_ensure_sends_and_raises(monkeyp
     guild = DummyGuild(voice_client=vc, members={})
     interaction = DummyInteraction(guild, DummyUser(2))
 
-    async def fake_ensure(vcin):
+    def fake_ensure(vcin):
         return None
 
     monkeypatch.setattr(discord_utils, "ensure_mixer", fake_ensure)
@@ -142,32 +219,85 @@ async def test_get_mixer_from_interaction_failed_ensure_sends_and_raises(monkeyp
     assert str(exc.value) == "Failed to connect to the voice channel."
 
 
-# --- Tests for get_mixer_from_voice_client ---
+# ---------------------------------------------------------------------------
+# Tests for get_mixer_from_voice_client
+# ---------------------------------------------------------------------------
 
-
-@pytest.mark.asyncio
-async def test_get_mixer_from_voice_client_failed_ensure(monkeypatch):
+def test_get_mixer_from_voice_client_failed_ensure(monkeypatch):
     vc = DummyVoiceClient()
 
-    async def fake_ensure(vcin):
+    def fake_ensure(vcin):
         return None
 
     monkeypatch.setattr(discord_utils, "ensure_mixer", fake_ensure)
 
     with pytest.raises(ValueError) as exc:
-        await get_mixer_from_voice_client(vc)
+        get_mixer_from_voice_client(vc)
     assert str(exc.value) == "Failed to connect to the voice channel."
 
 
-@pytest.mark.asyncio
-async def test_get_mixer_from_voice_client_success(monkeypatch):
+def test_get_mixer_from_voice_client_success(monkeypatch):
     vc = DummyVoiceClient()
     dummy_mixer = DummyMixer()
 
-    async def fake_ensure(vcin):
+    def fake_ensure(vcin):
         return dummy_mixer
 
     monkeypatch.setattr(discord_utils, "ensure_mixer", fake_ensure)
 
-    result = await get_mixer_from_voice_client(vc)
+    result = get_mixer_from_voice_client(vc)
     assert result is dummy_mixer
+
+
+# ---------------------------------------------------------------------------
+# Tests for get_voice_channel_mixer
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_get_voice_channel_mixer_no_guild():
+    interaction = DummyInteraction(guild=None, user=DummyUser(1))
+    result = await get_voice_channel_mixer(interaction)
+    # Should send an ephemeral message and return None
+    assert interaction.followup.sent == [
+        ("This command can only be used in a server.", True)
+    ]
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_get_voice_channel_mixer_user_not_in_channel():
+    # Guild exists but member not in voice (voice=None)
+    member = DummyMember(user_id=1, voice=None)
+    guild = DummyGuild(voice_client=None, members={1: member})
+    interaction = DummyInteraction(guild, DummyUser(1))
+
+    result = await get_voice_channel_mixer(interaction)
+    assert interaction.followup.sent == [
+        ("Join a voice channel first.", True)
+    ]
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_get_voice_channel_mixer_success(monkeypatch):
+    # Member in channel, ensure_connected returns vc, get_mixer returns mixer
+    vc = DummyVoiceClient()
+    channel = DummyChannel(vc)
+    member = DummyMember(user_id=1, voice=DummyVoice(channel=channel))
+    guild = DummyGuild(voice_client=None, members={1: member})
+    interaction = DummyInteraction(guild, DummyUser(1))
+
+    dummy_mixer = DummyMixer()
+    async def fake_ensure(g, ch):
+        assert g is guild and ch is channel
+        return vc
+    def fake_get_mixer(vcin):
+        assert vcin is vc
+        return dummy_mixer
+
+    monkeypatch.setattr(discord_utils, "ensure_connected", fake_ensure)
+    monkeypatch.setattr(discord_utils, "get_mixer_from_voice_client", fake_get_mixer)
+    monkeypatch.setattr(discord_utils.discord, "VoiceChannel", DummyChannel, raising=False)
+
+    result = await get_voice_channel_mixer(interaction)
+    assert result == (vc, dummy_mixer)

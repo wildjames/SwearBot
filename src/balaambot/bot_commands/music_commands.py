@@ -1,7 +1,5 @@
-import asyncio
 import logging
 from collections.abc import Awaitable, Callable
-from typing import TYPE_CHECKING
 
 import discord
 from discord import Client, InteractionCallbackResponse, app_commands
@@ -11,9 +9,6 @@ from discord.ui import Button, View
 from balaambot import discord_utils, utils
 from balaambot.audio_handlers import youtube_audio, youtube_utils
 from balaambot.schedulers import youtube_jobs
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -108,6 +103,7 @@ class MusicCommands(commands.Cog):
                 "Invalid play command. Please provide a valid youtube video "
                 "or playlist link, or a searchable string."
             ),
+            ephemeral=True,
         )
         return
 
@@ -166,27 +162,20 @@ class MusicCommands(commands.Cog):
             )
 
         # Enqueue all tracks and start background fetches
-        fetch_tasks: list[asyncio.Task[Path]] = []
+        # TODO: Also fetch the track metadata here too.
+        # promises = []
         for track_url in track_urls:
-            fetch_task = asyncio.create_task(
-                youtube_audio.fetch_audio_pcm(
-                    track_url,
-                    sample_rate=mixer.SAMPLE_RATE,
-                    channels=mixer.CHANNELS,
-                )
-            )
-            fetch_tasks.append(fetch_task)
+            # These have to be awaited, to preserve order.
             await youtube_jobs.add_to_queue(
                 vc, track_url, text_channel=interaction.channel_id
             )
+            # promises.append(youtube_audio.get_youtube_track_metadata(track_url))
 
         # Confirmation message
         await interaction.followup.send(
             f"🎵    Queued {len(track_urls)} tracks from playlist.", ephemeral=False
         )
 
-        # And wait for the first video to download
-        await fetch_tasks[0]
         return None
 
     async def do_play(self, interaction: discord.Interaction, url: str) -> None:
@@ -196,15 +185,6 @@ class MusicCommands(commands.Cog):
         if vc_mixer is None:
             return
         vc, mixer = vc_mixer
-
-        # download and cache in background
-        fetch_task = asyncio.create_task(
-            youtube_audio.fetch_audio_pcm(
-                url,
-                sample_rate=mixer.SAMPLE_RATE,
-                channels=mixer.CHANNELS,
-            )
-        )
 
         # Add to queue. Playback (in mixer) will await cache when it's time
         await youtube_jobs.add_to_queue(vc, url, text_channel=interaction.channel_id)
@@ -227,12 +207,6 @@ class MusicCommands(commands.Cog):
             f" ({runtime})** at position {pos}."
         )
         await interaction.followup.send(msg, ephemeral=False)
-
-        # wait for the background fetch to complete (so file is ready later)
-        try:
-            await fetch_task
-        except Exception:
-            logger.exception("Failed to fetch audio for %s", url)
 
     @app_commands.command(name="list_queue", description="List upcoming YouTube tracks")
     async def list_queue(self, interaction: discord.Interaction) -> None:
@@ -270,13 +244,18 @@ class MusicCommands(commands.Cog):
             for i, url in enumerate(upcoming):
                 track_meta = await youtube_audio.get_youtube_track_metadata(url)
                 if track_meta is None:
-                    lines.append(f"{i + 1}. [Invalid track URL]({url})")
-                    continue
-                lines.append(
-                    f"{i + 1}. [{track_meta['title']}]({track_meta['url']})"
-                    f" ({track_meta['runtime_str']})"
-                )
-                total_runtime += track_meta["runtime"]
+                    new_line = f"{i + 1}. [Invalid track URL]({url})"
+                else:
+                    new_line = (
+                        f"{i + 1}. {track_meta['title']} ({track_meta['runtime_str']})"
+                    )
+                    total_runtime += track_meta["runtime"]
+
+                if (
+                    sum([len(s) for s in lines]) + len(new_line) + 100
+                    < discord_utils.MAX__MESSAGE_LENGTH
+                ):
+                    lines.append(new_line)
 
             track_meta = await youtube_audio.get_youtube_track_metadata(upcoming[0])
             if track_meta is None:

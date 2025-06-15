@@ -31,6 +31,9 @@ class VideoMetadata(TypedDict):
 # Keyed by URL, values are VideoMetadata
 video_metadata: dict[str, VideoMetadata] = {}
 
+# This will hold the upcoming tracks metadata
+youtube_queue: list[VideoMetadata] = []
+
 # Locks to prevent multiple simultaneous downloads of the same URL
 _download_locks: dict[str, asyncio.Lock] = {}
 
@@ -44,7 +47,10 @@ async def get_youtube_track_metadata(url: str) -> VideoMetadata | None:
 
     # return cached metadata if available
     if url in video_metadata:
+        logger.info("Returning cached track metadata for '%s'", url)
         return video_metadata[url]
+
+    logger.info("Fetching track metadata, but not already cached. URL: '%s'", url)
 
     ydl_opts = {
         "quiet": True,
@@ -96,10 +102,6 @@ async def fetch_audio_pcm(
     if cache_path.exists():
         return cache_path
 
-    if username or password:
-        msg = "YouTube authentication is not implemented yet."
-        raise NotImplementedError(msg)
-
     lock = _download_locks.setdefault(url, asyncio.Lock())
     async with lock:
         if cache_path.exists():
@@ -110,7 +112,8 @@ async def fetch_audio_pcm(
         # download audio and fetch metadata concurrently
         try:
             await asyncio.gather(
-                _download_opus(url, opus_tmp), get_youtube_track_metadata(url)
+                _download_opus(url, opus_tmp, username=username, password=password),
+                get_youtube_track_metadata(url),
             )
         except DownloadError as e:
             logger.exception("yt-dlp failed to download %s", url)
@@ -118,12 +121,27 @@ async def fetch_audio_pcm(
             raise RuntimeError(msg) from e
 
         await _convert_opus_to_pcm(opus_tmp, pcm_tmp, cache_path, sample_rate, channels)
+        # TODO: Dispatch ffmpeg to normalise the volume here
 
         return cache_path
 
 
-async def _download_opus(url: str, opus_tmp: Path) -> None:
+# Helper for when I run blocking download in thread
+def _sync_download(opts: dict[str, Any], target_url: str) -> None:
+    YoutubeDL(opts).download([target_url])  # type: ignore[no-typing]
+
+
+async def _download_opus(
+    url: str,
+    opus_tmp: Path,
+    username: str | None = None,
+    password: str | None = None,
+) -> None:
     """Use yt-dlp to download and extract audio as opus into opus_tmp."""
+    if username or password:
+        msg = "YouTube authentication is not implemented yet."
+        raise NotImplementedError(msg)
+
     # Ensure directory exists
     opus_tmp.parent.mkdir(parents=True, exist_ok=True)
 
@@ -142,15 +160,11 @@ async def _download_opus(url: str, opus_tmp: Path) -> None:
                 "preferredcodec": "opus",
             }
         ],
-        "outtmpl": str(opus_tmp.with_suffix("")),  # drop .part suffix
+        "outtmpl": str(opus_tmp.with_suffix("")),
     }
 
-    # run blocking download in thread
-    def _sync_download(opts: dict[str, Any], target_url: str) -> None:
-        YoutubeDL(opts).download([target_url])  # type: ignore[no-typing]
-
     loop = asyncio.get_event_loop()
-    await loop.run_in_executor(None, _sync_download, ydl_opts, url)
+    await loop.run_in_executor(utils.FUTURES_EXECUTOR, _sync_download, ydl_opts, url)
 
     final_opus = opus_tmp.with_suffix(".opus")
     if not final_opus.exists():

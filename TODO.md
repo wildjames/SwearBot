@@ -2,6 +2,8 @@
 
 These are smaller jobs, that shouldn't take too long to knock down individually.
 
+- [ ] Refactor the video metadata to store metadata in a json file, and retrieve from there. Then, get the metadata in a subprocess whenever something is added to the queue.
+  - [ ] Really, this should be a cache of some kind. Redis probably, but it's a lot of effort and I'm not sure the juice is worth the squeeze just for this.
 - [ ] Add a cronjob to remove cached audio files that are over a week old
 - [ ] When the bot sends a message with a youtube video in it, it should contain a link to the video
 - [ ] too many sounds in the zip. /list_sfx gives an error because it hits the message limit
@@ -28,6 +30,7 @@ These are things that will likely take over an hour
 - [x] Some things are not async enough, it seems. Downloading videos can cause playback to stutter. Break out the downloading logic to multithreading/processing?
   - [ ] tentatively solved. Needs thorough testing though
 - [ ] When adding a lot of songs to the queue, don't download them all in advance. Only download the current track, and the next one.
+- [ ] Should we stream opus data rather than PCM?
 - [ ] Youtube age restricts some content, so I need to implement auth
 - [ ] Commands need to have guard clauses abstracted out into some discord utility functions
 - [ ] Add a way to scrub the currently playing track?

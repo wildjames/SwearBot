@@ -5,6 +5,8 @@ import discord
 from balaambot.audio_handlers.multi_audio_source import MultiAudioSource, ensure_mixer
 from balaambot.config import DISCORD_VOICE_CLIENT
 
+MAX__MESSAGE_LENGTH = 2000
+
 
 async def ensure_connected(
     guild: discord.Guild, channel: discord.VoiceChannel
@@ -51,7 +53,7 @@ async def get_mixer_from_interaction(
             raise ValueError(msg)
 
     vc = cast("DISCORD_VOICE_CLIENT", vc)
-    mixer = await ensure_mixer(vc)
+    mixer = ensure_mixer(vc)
 
     if not mixer:
         await interaction.followup.send(
@@ -63,11 +65,11 @@ async def get_mixer_from_interaction(
     return mixer
 
 
-async def get_mixer_from_voice_client(
+def get_mixer_from_voice_client(
     vc: DISCORD_VOICE_CLIENT,
 ) -> MultiAudioSource:
     """Get the mixer for the given voice client."""
-    mixer = await ensure_mixer(vc)
+    mixer = ensure_mixer(vc)
 
     if not mixer:
         msg = "Failed to connect to the voice channel."
@@ -100,5 +102,5 @@ async def get_voice_channel_mixer(
         member.voice.channel,
     )
 
-    mixer = await get_mixer_from_voice_client(vc)
+    mixer = get_mixer_from_voice_client(vc)
     return vc, mixer

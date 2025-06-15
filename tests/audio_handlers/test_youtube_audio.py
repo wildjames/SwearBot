@@ -81,7 +81,7 @@ async def test_fetch_audio_download_error(monkeypatch, tmp_path):
     cache = tmp_path / 'out.pcm'
     monkeypatch.setattr(handler, 'get_cache_path', lambda u, sr, ch: cache)
     monkeypatch.setattr(handler, 'get_temp_paths', lambda u: (tmp_path / 'a.opus', tmp_path / 'b.pcm'))
-    async def fail_download(u, p): raise DownloadError('dl fail')
+    async def fail_download(u, p, username=None, password=None): raise DownloadError('dl fail')
     monkeypatch.setattr(handler, '_download_opus', fail_download)
     async def dummy_meta(u): return None
     monkeypatch.setattr(handler, 'get_youtube_track_metadata', dummy_meta)
@@ -95,7 +95,7 @@ async def test_fetch_audio_success(monkeypatch, tmp_path):
     pcm_tmp = tmp_path / 't.pcm'
     monkeypatch.setattr(handler, 'get_cache_path', lambda u, sr, ch: cache)
     monkeypatch.setattr(handler, 'get_temp_paths', lambda u: (opus_tmp, pcm_tmp))
-    async def fake_download(u, p): p.write_bytes(b'o')
+    async def fake_download(u, p, username=None, password=None): p.write_bytes(b'o')
     monkeypatch.setattr(handler, '_download_opus', fake_download)
     async def fake_meta(u): return {'url': u, 'title': 't', 'runtime': 1, 'runtime_str': '0:01'}
     monkeypatch.setattr(handler, 'get_youtube_track_metadata', fake_meta)
@@ -117,18 +117,28 @@ async def test_download_opus_failure(monkeypatch, tmp_path):
     assert 'yt-dlp failed to produce' in str(ei.value)
 
 async def test_download_opus_success(monkeypatch, tmp_path):
-    url = 'u'
-    opus_tmp = tmp_path / 'file'
-    def fake_dl(lst):
-        f = opus_tmp.with_suffix('.opus')
-        f.parent.mkdir(parents=True, exist_ok=True)
-        f.write_bytes(b'o')
-    class DummyYDL:
-        def __init__(self, opts): pass
-        def download(self, lst): fake_dl(lst)
-    monkeypatch.setattr(handler, 'YoutubeDL', lambda opts: DummyYDL(opts))
+    url = "u"
+    opus_tmp = tmp_path / "file"
+
+    # Stub out the new synchronous downloader to write a dummy .opus file
+    def fake_sync_download(opts, target_url) -> None:
+        outtmpl = opts["outtmpl"]
+        # the real code will append ".opus" to this
+        opus_file = Path(f"{outtmpl}.opus")
+        opus_file.parent.mkdir(parents=True, exist_ok=True)
+        opus_file.write_bytes(b"dummy opus data")
+
+    # Patch the helper so that run_in_executor just calls our fake
+    monkeypatch.setattr(handler, "_sync_download", fake_sync_download)
+    monkeypatch.setattr(handler.utils, "FUTURES_EXECUTOR", None)
+
+    # Now run the async download – it should create file.opus and then rename it to file
     await handler._download_opus(url, opus_tmp)
+
+    # Assert that the final opus_tmp (no extension) exists
     assert opus_tmp.exists()
+    # And that it’s non-empty
+    assert opus_tmp.read_bytes() == b"dummy opus data"
 
 # Tests for _convert_opus_to_pcm
 async def test_convert_opus_to_pcm_failure(monkeypatch, tmp_path):
@@ -241,3 +251,26 @@ async def test_search_valid(monkeypatch):
         ('https://www.youtube.com/watch?v=1', 'A', 10),
         ('https://www.youtube.com/watch?v=3', 'D', 15),
     ]
+
+# Tests for the new _sync_download helper
+def test_sync_download_success(monkeypatch):
+    called = {}
+    class DummyYDL:
+        def __init__(self, opts):
+            called['opts'] = opts
+        def download(self, urls):
+            called['urls'] = urls
+    monkeypatch.setattr(handler, 'YoutubeDL', DummyYDL)
+    opts = {'format': 'bestaudio'}
+    url = 'https://youtu.be/test'
+    handler._sync_download(opts, url)
+    assert called['opts'] is opts
+    assert called['urls'] == [url]
+
+def test_sync_download_propagates_error(monkeypatch):
+    class DummyYDL:
+        def __init__(self, opts): pass
+        def download(self, urls): raise DownloadError('dl fail')
+    monkeypatch.setattr(handler, 'YoutubeDL', DummyYDL)
+    with pytest.raises(DownloadError):
+        handler._sync_download({'a': 1}, 'u')

@@ -3,14 +3,21 @@ from collections.abc import Callable
 
 from discord.channel import CategoryChannel, ForumChannel
 
-from balaambot import discord_utils
-from balaambot.audio_handlers.youtube_audio import video_metadata
+from balaambot import discord_utils, utils
+from balaambot.audio_handlers.youtube_audio import (
+    get_youtube_track_metadata,
+    video_metadata,
+)
+from balaambot.audio_handlers.youtube_utils import get_cache_path, get_temp_paths
+from balaambot.schedulers.youtube_download_worker import download_and_convert
 
 # TODO: This should maintain a "playing" state so we can pause and resume playback
 
 # Mapping from voice client to its queue of YouTube URLs
 # The key is the guild ID, and the value is a list of URLs.
 youtube_queue: dict[int, list[str]] = {}
+# Always check that this many tracks in the queue are cached
+QUEUE_FORESIGHT = 3
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +49,48 @@ async def add_to_queue(
             raise
 
 
+async def _maybe_preload_next_tracks(
+    vc: discord_utils.DISCORD_VOICE_CLIENT,
+    queue: list[str],
+    foresight: int = QUEUE_FORESIGHT,
+) -> None:
+    logger.info("Caching the next %d tracks in the queue...", foresight)
+
+    upcoming = queue[1 : foresight + 1]  # skip the currently playing track
+
+    for url in upcoming:
+        logger.info("  - Caching %s", url)
+
+    for url in upcoming:
+        mixer = discord_utils.get_mixer_from_voice_client(vc)
+
+        cache_path = get_cache_path(url, mixer.SAMPLE_RATE, mixer.CHANNELS)
+        if cache_path.exists():
+            continue  # already downloaded
+
+        opus_tmp, pcm_tmp = get_temp_paths(url)
+        try:
+            await vc.loop.run_in_executor(
+                utils.FUTURES_EXECUTOR,
+                download_and_convert,
+                url,
+                opus_tmp,
+                pcm_tmp,
+                cache_path,
+                mixer.SAMPLE_RATE,
+                mixer.CHANNELS,
+            )
+        except Exception:
+            logger.exception("Failed to pre-download %s", url)
+            try:
+                queue.remove(url)
+                logger.warning("Removed %s from queue due to pre-download failure", url)
+                # Try fetching again, since the queue changed
+                await _maybe_preload_next_tracks(vc, queue, foresight)
+            except ValueError:
+                pass  # failed to remove is the only error this can catch, I think?
+
+
 def create_before_after_functions(
     url: str, vc: discord_utils.DISCORD_VOICE_CLIENT, text_channel: int | None = None
 ) -> tuple[Callable[[], None], Callable[[], None]]:
@@ -56,6 +105,11 @@ def create_before_after_functions(
         logger.info("Starting playback for %s", url)
         if text_channel is not None:
             channel = vc.guild.get_channel(text_channel)
+            logger.info(
+                "Sending a playback started message to channel '%s' (instance of %s)",
+                channel,
+                type(channel),
+            )
             if channel is not None and not isinstance(
                 channel, (ForumChannel, CategoryChannel)
             ):
@@ -64,6 +118,7 @@ def create_before_after_functions(
                 if track:
                     content = f"▶️    Now playing **[{track['title']}]({track['url']})**"
 
+                logger.info("Sending message: '%s'", content)
                 job = channel.send(content=content)
                 vc.loop.create_task(job)
 
@@ -110,15 +165,20 @@ async def _play_next(
     url = queue[0]
     logger.info("Starting playback of %s for guild_id=%s", url, vc.guild.id)
 
+    # TODO: This should be done before now, probably
+    await get_youtube_track_metadata(url)
+
     _before_play, _after_play = create_before_after_functions(url, vc, text_channel)
 
     try:
-        mixer = await discord_utils.get_mixer_from_voice_client(vc)
+        mixer = discord_utils.get_mixer_from_voice_client(vc)
         await mixer.play_youtube(url, before_play=_before_play, after_play=_after_play)
         # After transmitting silence, discord stops calling the read() method.
         # So, we need to call the play method again to get it going again.
         if not vc.is_playing():
             vc.play(mixer)
+
+        await _maybe_preload_next_tracks(vc, queue)
     except Exception:
         logger.exception("Error playing YouTube URL %s", url)
         # Clear the queue to avoid infinite retries
@@ -135,7 +195,7 @@ def get_current_track(vc: discord_utils.DISCORD_VOICE_CLIENT) -> str | None:
 
 async def skip(vc: discord_utils.DISCORD_VOICE_CLIENT) -> None:
     """Skip the current track and play the next in queue."""
-    mixer = await discord_utils.get_mixer_from_voice_client(vc)
+    mixer = discord_utils.get_mixer_from_voice_client(vc)
     try:
         # This triggers the after_play callback which will handle the next track
         logger.info("Skipping current track for guild_id=%s", vc.guild.id)
@@ -160,7 +220,7 @@ async def list_queue(vc: discord_utils.DISCORD_VOICE_CLIENT) -> list[str]:
 async def stop(vc: discord_utils.DISCORD_VOICE_CLIENT) -> None:
     """Stop playback and clear the queue."""
     # Stop current playback
-    mixer = await discord_utils.get_mixer_from_voice_client(vc)
+    mixer = discord_utils.get_mixer_from_voice_client(vc)
     try:
         mixer.clear_tracks()
         mixer.pause()
