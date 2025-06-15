@@ -148,7 +148,7 @@ def create_before_after_functions(
         # Schedule the next track when this one finishes
         logger.info("Finished playing %s for guild_id=%s", url, vc.guild.id)
         try:
-            vc.loop.create_task(_play_next(vc))
+            vc.loop.create_task(_play_next(vc, text_channel=text_channel))
         except Exception:
             logger.exception(
                 "Failed to schedule next track for guild_id=%s", vc.guild.id

@@ -239,21 +239,15 @@ class MusicCommands(commands.Cog):
             lines: list[str] = []
             total_runtime = 0
 
-            for i, url in enumerate(upcoming):
+            for i, url in enumerate(upcoming[:10]):
+                new_line = f"{i + 1}. [Invalid track URL]({url})"
                 track_meta = await youtube_audio.get_youtube_track_metadata(url)
-                if track_meta is None:
-                    new_line = f"{i + 1}. [Invalid track URL]({url})"
-                else:
+                if track_meta is not None:
                     new_line = (
                         f"{i + 1}. {track_meta['title']} ({track_meta['runtime_str']})"
                     )
                     total_runtime += track_meta["runtime"]
-
-                if (
-                    sum([len(s) for s in lines]) + len(new_line) + 100
-                    < discord_utils.MAX__MESSAGE_LENGTH
-                ):
-                    lines.append(new_line)
+                lines.append(new_line)
 
             track_meta = await youtube_audio.get_youtube_track_metadata(upcoming[0])
             if track_meta is None:
@@ -264,7 +258,10 @@ class MusicCommands(commands.Cog):
                     f"[{track_meta['title']}]({track_meta['url']})"
                     f" ({track_meta['runtime_str']})"
                 )
-            msg = "**Upcoming tracks:**\n" + "\n".join(lines)
+            msg = (
+                f"**Upcoming tracks ({len(lines)} of {len(upcoming)} shown):**\n"
+                + "\n".join(lines)
+            )
 
             # format runtime as H:MM:SS or M:SS
             total_runtime_str = sec_to_string(total_runtime)
@@ -314,7 +311,7 @@ class MusicCommands(commands.Cog):
             )
             return
         await interaction.followup.send(
-            f"⏭️    Skipped to next track: [{track_meta['title']}]({track_meta['url']})",
+            "⏭️    Skipped to next track",
             ephemeral=False,
         )
 

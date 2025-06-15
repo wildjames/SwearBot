@@ -5,6 +5,7 @@ from pathlib import Path
 from yt_dlp import DownloadError
 
 import balaambot.utils as utils
+# Adjust import path if module name differs
 import balaambot.youtube.youtube_audio as handler
 
 pytestmark = pytest.mark.asyncio
@@ -69,7 +70,6 @@ async def test_metadata_cache_hit(monkeypatch, tmp_path):
     monkeypatch.setattr(handler, 'is_valid_youtube_url', lambda url: True)
     monkeypatch.setattr(handler, 'get_metadata_path', lambda u: cache_file)
     # Should return without invoking YoutubeDL
-    called = {'dl': False}
     monkeypatch.setattr(handler, 'YoutubeDL', lambda opts: (_ for _ in ()).throw(RuntimeError("Shouldn't be called")))
     result = await handler.get_youtube_track_metadata('u')
     assert result == data
@@ -82,7 +82,7 @@ async def test_metadata_defaults(monkeypatch, tmp_path):
     class DummyYDL:
         def __enter__(self): return self
         def __exit__(self, *args): return False
-        def extract_info(self, url, download): return {}
+        def extract_info(self, url, download): return {'title': None, 'duration': None}
     monkeypatch.setattr(handler, 'YoutubeDL', lambda opts: DummyYDL())
     monkeypatch.setattr(utils, 'sec_to_string', lambda s: '0:00')
     result = await handler.get_youtube_track_metadata('u')
@@ -201,7 +201,9 @@ async def test_convert_opus_to_pcm_failure(monkeypatch, tmp_path):
     class DummyProcess:
         def __init__(self): self.returncode = 1
         async def communicate(self): return (b'', b'err')
-    monkeypatch.setattr(asyncio, 'create_subprocess_exec', lambda *a, **k: DummyProcess())
+    async def fake_exec(*args, **kwargs):
+        return DummyProcess()
+    monkeypatch.setattr(asyncio, 'create_subprocess_exec', fake_exec)
     with pytest.raises(RuntimeError) as ei:
         await handler._convert_opus_to_pcm(opus_tmp, pcm_tmp, cache, 8000, 1)
     assert 'ffmpeg failed:' in str(ei.value)
@@ -215,7 +217,9 @@ async def test_convert_opus_to_pcm_success(monkeypatch, tmp_path):
     class DummyProcess:
         def __init__(self): self.returncode = 0
         async def communicate(self): return (b'', b'')
-    monkeypatch.setattr(asyncio, 'create_subprocess_exec', lambda *a, **k: DummyProcess())
+    async def fake_exec(*args, **kwargs):
+        return DummyProcess()
+    monkeypatch.setattr(asyncio, 'create_subprocess_exec', fake_exec)
     await handler._convert_opus_to_pcm(opus_tmp, pcm_tmp, cache, 16000, 2)
     assert not opus_tmp.exists()
     assert cache.exists()
@@ -241,7 +245,7 @@ async def test_playlist_exception(monkeypatch):
     class DummyYDL:
         def __enter__(self): return self
         def __exit__(self, *args): return False
-        def extract_info(self, u, download): raise ValueError('err')
+        def replicate_info(self, u, download): raise ValueError('err')
     monkeypatch.setattr(handler, 'YoutubeDL', lambda opts: DummyYDL())
     result = await handler.get_playlist_video_urls('u')
     assert result == []
