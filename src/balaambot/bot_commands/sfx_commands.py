@@ -43,28 +43,12 @@ class SFXCommands(commands.Cog):
         max_interval: float,
     ) -> None:
         """Add a scheduled sound effect (SFX) job to the server."""
-        if interaction.guild is None:
-            await interaction.response.send_message(
-                "This command only works in a server.", ephemeral=True
-            )
+        await interaction.response.defer(thinking=True, ephemeral=True)
+        # Check if the user is in a voice channel
+        vc = await discord_utils.get_voice_channel(interaction)
+        if vc is None:
             return
 
-        member = interaction.guild.get_member(interaction.user.id)
-        if (
-            not member
-            or not member.voice
-            or not member.voice.channel
-            or not isinstance(member.voice.channel, discord.VoiceChannel)
-        ):
-            await interaction.response.send_message(
-                "You need to be in a standard voice channel to add a job.",
-                ephemeral=True,
-            )
-            return
-
-        vc = await discord_utils.ensure_connected(
-            interaction.guild, member.voice.channel
-        )
         try:
             job_id = await audio_sfx_jobs.add_job(vc, sound, min_interval, max_interval)
             message = (

@@ -33,6 +33,10 @@ class SearchView(View):
         self.results = results_list
         self.parent = parent
         self.vc = vc
+        # # Add a timeout so this doesn't hang forever
+        # self.timeout = 60
+        # self.on_timeout =
+        # async def on_timeout(inner_interaction: discord.Interaction) ->
 
         for idx, (url, title, _) in enumerate(self.results):
             button = Button(  # type: ignore  This type error is daft and I hate it so fuck that
@@ -341,6 +345,100 @@ class MusicCommands(commands.Cog):
         await interaction.response.send_message(
             "🗑️    Cleared the YouTube queue.", ephemeral=False
         )
+
+
+#         @app_commands.command(
+#             name="seek",
+#             description=
+# "Seek to a specific time in the current YouTube track
+# (e.g., 1:23 or -30 to rewind 30s)",
+#         )
+#         @app_commands.describe(
+#             position=
+# "Time to seek to (e.g., 1:23 for 1m23s, 90 for 90s, -30 to rewind 30s)"
+#         )
+#         async def seek(self, interaction: discord.Interaction, position: str) -> None:
+#             """Seek to a specific position in the current track."""
+#             await interaction.response.defer(ephemeral=True, thinking=True)
+#             vc = await discord_utils.get_voice_channel(interaction)
+#             if vc is None:
+#                 return
+
+#             # Get current track and metadata
+#             track_url = youtube_jobs.get_current_track(vc)
+#             if not track_url:
+#                 await interaction.followup.send(
+#                     "No track is currently playing.", ephemeral=True
+#                 )
+#                 return
+
+#             track_meta = await youtube_audio.get_youtube_track_metadata(track_url)
+#             if not track_meta or "runtime" not in track_meta:
+#                 await interaction.followup.send(
+#                     "Could not fetch track metadata.", ephemeral=True
+#                 )
+#                 return
+
+#             total_duration = track_meta["runtime"]
+
+#             # Parse position argument
+#             def parse_time_arg(arg: str) -> int | None:
+#                 arg = arg.strip()
+#                 if arg.startswith("-"):
+#                     try:
+#                         return -int(arg[1:])
+#                     except ValueError:
+#                         pass
+#                 if ":" in arg:
+#                     parts = arg.split(":")
+#                     try:
+#                         parts = [int(p) for p in parts]
+#                         if len(parts) == 2:
+#                             return parts[0] * 60 + parts[1]
+#                         if len(parts) == 3:
+#                             return parts[0] * 3600 + parts[1] * 60 + parts[2]
+#                     except ValueError:
+#                         return None
+#                 try:
+#                     return int(arg)
+#                 except ValueError:
+#                     return None
+
+#             seek_seconds = parse_time_arg(position)
+#             if seek_seconds is None:
+#                 await interaction.followup.send(
+#                     "Invalid time format.
+# Use seconds, H:MM:SS, M:SS, or -N to rewind.",
+#                     ephemeral=True,
+#                 )
+#                 return
+
+#             # Get current playback position
+#             current_pos = await youtube_jobs.get_current_position(vc)
+#             if current_pos is None:
+#                 current_pos = 0
+
+#             if seek_seconds < 0:
+#                 new_pos = max(0, current_pos + seek_seconds)
+#             else:
+#                 new_pos = seek_seconds
+
+#             new_pos = min(new_pos, total_duration)
+#             new_pos = max(new_pos, 0)
+
+#             # Actually perform the seek
+#             success = await youtube_jobs.seek(vc, new_pos)
+#             if not success:
+#                 await interaction.followup.send(
+#                     "Failed to seek in the current track.", ephemeral=True
+#                 )
+#                 return
+
+#             await interaction.followup.send(
+#
+# f"⏩    Seeked to {utils.sec_to_string(new_pos)} in **{track_meta['title']}**.",
+#                 ephemeral=False,
+#             )
 
 
 async def setup(bot: commands.Bot) -> None:
