@@ -29,6 +29,13 @@ bot = commands.Bot(
 )
 
 
+@bot.event
+async def on_ready() -> None:
+    """Call when the bot is ready; synchronizes slash commands with Discord."""
+    await bot.tree.sync()
+    logger.info("Logged in as %s", bot.user)
+
+
 async def load_extensions() -> None:
     """Load all the available bot extensions."""
     commands_path = pathlib.Path(__file__).parent / "bot_commands"

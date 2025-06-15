@@ -83,37 +83,54 @@ def test_start_raises_when_no_token(monkeypatch):
     monkeypatch.setenv("DISCORD_BOT_TOKEN", "")
     # Reload the module-level BOT_TOKEN
     monkeypatch.setenv("DISCORD_BOT_TOKEN", "")
-    monkeypatch.setattr(main, "BOT_TOKEN", os.getenv("DISCORD_BOT_TOKEN"))
+    monkeypatch.setattr(main, "DISCORD_BOT_TOKEN", os.getenv("DISCORD_BOT_TOKEN"))
     with pytest.raises(ValueError) as exc:
         main.start()
     assert "DISCORD_BOT_TOKEN environment variable is not set." in str(exc.value)
 
 
-def test_start_runs_extensions_and_bot(monkeypatch):
-    # Set a fake token
-    fake_token = "fake-token-123"
-    monkeypatch.setenv("DISCORD_BOT_TOKEN", fake_token)
-    monkeypatch.setattr(main, "BOT_TOKEN", fake_token)
+def test_load_extensions_fatal(monkeypatch):
+    # Patch glob to return empty list
+    monkeypatch.setattr(main.pathlib.Path, "glob", lambda self, pat: [])
+    called = {}
 
-    # Track calls to asyncio.run and bot.run
-    ran = {"asyncio_run": False, "bot_run": False}
+    def fake_fatal(msg):
+        called["fatal"] = msg
 
-    def fake_asyncio_run(coro):
-        # Should be called with main.load_extensions()
-        assert asyncio.iscoroutine(coro)
-        # We can run it synchronously since load_extensions is safe
-        asyncio.get_event_loop().run_until_complete(coro)
-        ran["asyncio_run"] = True
+    monkeypatch.setattr(main.logger, "fatal", fake_fatal)
+    # Should not raise, just log fatal
+    asyncio.run(main.load_extensions())
+    assert "No extensions found to load" in called["fatal"]
 
-    def fake_bot_run(token):
-        assert token == fake_token
-        ran["bot_run"] = True
 
-    monkeypatch.setattr(asyncio, "run", fake_asyncio_run)
-    monkeypatch.setattr(main.bot, "run", fake_bot_run)
+def test_main_invalid_token(monkeypatch):
+    monkeypatch.setenv("DISCORD_BOT_TOKEN", '"badtoken"')
+    monkeypatch.setattr(main, "DISCORD_BOT_TOKEN", '"badtoken"')
+    with pytest.raises(ValueError) as exc:
+        asyncio.run(main.main())
+    assert "contains invalid characters" in str(exc.value)
 
-    # Finally call start
-    main.start()
 
-    assert ran["asyncio_run"], "asyncio.run was not called"
-    assert ran["bot_run"], "bot.run was not called"
+def test_main_success(monkeypatch):
+    monkeypatch.setenv("DISCORD_BOT_TOKEN", "goodtoken")
+    monkeypatch.setattr(main, "DISCORD_BOT_TOKEN", "goodtoken")
+
+    class DummyBot:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def start(self, token):
+            assert token == "goodtoken"
+
+    monkeypatch.setattr(main, "bot", DummyBot())
+
+    async def fake_load_extensions():
+        pass
+
+    monkeypatch.setattr(main, "load_extensions", fake_load_extensions)
+    # Should not raise
+    asyncio.run(main.main())
+
