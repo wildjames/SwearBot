@@ -6,7 +6,7 @@ from yt_dlp import DownloadError
 
 import balaambot.utils as utils
 # Adjust import path if module name differs
-import balaambot.youtube.youtube_audio as handler
+import balaambot.youtube.audio as handler
 
 pytestmark = pytest.mark.asyncio
 
