@@ -8,7 +8,7 @@ import balaambot.config
 # Helper to import the module under test with custom dirs
 def import_utils(tmp_cache_root: Path):
     balaambot.config.PERSISTENT_DATA_DIR = str(tmp_cache_root)
-    module_name = "src.balaambot.audio_handlers.youtube_utils"
+    module_name = "src.balaambot.youtube.utils"
     if module_name in sys.modules:
         del sys.modules[module_name]
     return importlib.import_module(module_name)

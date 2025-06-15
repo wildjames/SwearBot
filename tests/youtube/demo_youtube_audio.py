@@ -1,13 +1,13 @@
 import asyncio
 import logging
 
-from balaambot.audio_handlers.youtube_audio import (
+from balaambot.youtube.youtube_audio import (
     fetch_audio_pcm,
     get_playlist_video_urls,
     get_youtube_track_metadata,
     search_youtube,
 )
-from balaambot.audio_handlers.youtube_utils import (
+from balaambot.youtube.utils import (
     remove_audio_pcm,
     get_audio_pcm,
 )

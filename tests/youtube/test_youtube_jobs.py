@@ -3,7 +3,7 @@ import asyncio
 
 import pytest
 
-import balaambot.schedulers.youtube_jobs as ytj
+import balaambot.youtube.youtube_jobs as ytj
 from balaambot import discord_utils
 
 

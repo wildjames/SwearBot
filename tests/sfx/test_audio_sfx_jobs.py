@@ -5,7 +5,7 @@ import uuid
 
 import pytest
 
-import balaambot.schedulers.audio_sfx_jobs as sfx
+import balaambot.sfx.audio_sfx_jobs as sfx
 from balaambot import discord_utils
 
 
