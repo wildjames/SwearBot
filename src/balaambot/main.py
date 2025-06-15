@@ -12,25 +12,40 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG)
 
+DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN")
+
 intents = discord.Intents.default()
 intents.message_content = True
 intents.voice_states = True
 
 bot = commands.Bot(
-    command_prefix="!",
+    command_prefix=commands.when_mentioned_or("!"),
     case_insensitive=True,
     intents=intents,
     description="A bot for the NaughtyBoys",
 )
 
-BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN")
+
+# @bot.event
+# async def on_ready():
+#     print(f"Logged in as {bot.user} (ID: {bot.user.id})")
+#     print("------")
 
 
-@bot.event
-async def on_ready() -> None:
-    """Call when the bot is ready; synchronizes slash commands with Discord."""
-    await bot.tree.sync()
-    logger.info("Logged in as %s", bot.user)
+# async def main():
+#     async with bot:
+#         await bot.add_cog(Music(bot))
+#         await bot.start("token")
+
+
+# asyncio.run(main())
+
+
+# @bot.event
+# async def on_ready() -> None:
+#     """Call when the bot is ready; synchronizes slash commands with Discord."""
+#     await bot.tree.sync()
+#     logger.info("Logged in as %s", bot.user)
 
 
 async def load_extensions() -> None:
@@ -49,21 +64,27 @@ async def load_extensions() -> None:
             await bot.load_extension(ext_path)
 
 
-def start() -> None:
-    """Entrypoint for the bot; schedules extension loading and runs the bot."""
-    if BOT_TOKEN is None or BOT_TOKEN == "":
+async def main() -> None:
+    """Main async process that runs the bot."""
+    # Check the token is valid
+    if DISCORD_BOT_TOKEN is None or DISCORD_BOT_TOKEN == "":
         msg = "DISCORD_BOT_TOKEN environment variable is not set."
         raise ValueError(msg)
-    if '"' in BOT_TOKEN:
+    if '"' in DISCORD_BOT_TOKEN:
         msg = (
             "DISCORD_BOT_TOKEN contains invalid characters. "
             'Do not wrap the token in "..." inside the .env file!'
         )
         raise ValueError(msg)
-    asyncio.run(load_extensions())
     logger.info("Starting bot...")
-    bot.run(BOT_TOKEN)
+    async with bot:
+        # Loads all files in bot_commands
+        await load_extensions()
+        # Start the bot
+        await bot.start(DISCORD_BOT_TOKEN)
 
 
-if __name__ == "__main__":
-    start()
+def start() -> None:
+    """Entrypoint for the bot. Starts the main async process."""
+    # Bot must be run this way so all tasks run in the same process
+    asyncio.run(main())
