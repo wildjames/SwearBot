@@ -4,15 +4,15 @@ from collections.abc import Callable
 from discord.channel import CategoryChannel, ForumChannel
 
 from balaambot import discord_utils, utils
-from balaambot.youtube.utils import get_cache_path, get_temp_paths
-from balaambot.youtube.youtube_audio import (
+from balaambot.youtube.audio import (
     fetch_cached_youtube_track_metadata,
     get_youtube_track_metadata,
 )
-from balaambot.youtube.youtube_download_worker import (
+from balaambot.youtube.download_worker import (
     download_and_convert,
     get_metadata,
 )
+from balaambot.youtube.utils import get_cache_path, get_temp_paths
 
 # TODO: This should maintain a "playing" state so we can pause and resume playback
 

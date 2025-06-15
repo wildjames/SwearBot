@@ -13,11 +13,11 @@ from typing import TypedDict
 from discord import AudioSource
 
 from balaambot.config import DISCORD_VOICE_CLIENT
-from balaambot.youtube.utils import get_audio_pcm
 
 # TODO: Refactor so that the mixer is agnostic to youtube or files.
 # They're the same under the hood anyway
-from balaambot.youtube.youtube_audio import fetch_audio_pcm
+from balaambot.youtube.audio import fetch_audio_pcm
+from balaambot.youtube.utils import get_audio_pcm
 
 logger = logging.getLogger(__name__)
 

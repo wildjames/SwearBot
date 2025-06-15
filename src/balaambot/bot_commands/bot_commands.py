@@ -6,7 +6,7 @@ from discord.ext import commands
 
 from balaambot.discord_utils import ensure_connected
 from balaambot.sfx.audio_sfx_jobs import stop_all_jobs as sfx_stop
-from balaambot.youtube.youtube_jobs import stop as yt_stop
+from balaambot.youtube.jobs import stop as yt_stop
 
 logger = logging.getLogger(__name__)
 
