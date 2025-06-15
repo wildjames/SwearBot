@@ -186,12 +186,14 @@ async def test_play_next_play_youtube_raises(dummy_logger, monkeypatch):
     assert dummy_logger.exceptions
 
 
-def test_get_current_track_empty():
+@pytest.mark.asyncio
+async def test_get_current_track_empty():
     vc = DummyVC(30)
     assert ytj.get_current_track(vc) is None
 
 
-def test_get_current_track_non_empty():
+@pytest.mark.asyncio
+async def test_get_current_track_non_empty():
     vc = DummyVC(31)
     ytj.youtube_queue[31] = ["first", "second"]
     assert ytj.get_current_track(vc) == "first"
@@ -406,10 +408,10 @@ async def test_after_play_finishes_queue(monkeypatch, dummy_logger):
     assert channel.sent and "Finished playing queue!" in channel.sent[0]
 
 
-def test_before_after_no_text_channel(dummy_logger):
+@pytest.mark.asyncio
+async def test_before_after_no_text_channel(dummy_logger):
     vc = DummyVC(90)
     ytj.youtube_queue[90] = ["u"]
     before, after = ytj.create_before_after_functions("u", vc, text_channel=None)
-    # should not raise
     before()
     after()
