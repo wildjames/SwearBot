@@ -1,11 +1,14 @@
 import atexit
+import json
 import logging
 import re
 import shutil
 import urllib.parse
 from pathlib import Path
+from typing import Any, TypedDict, cast
 
 import balaambot.config
+from balaambot.utils import sec_to_string
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +40,16 @@ def _cleanup_tmp() -> None:
 
 
 atexit.register(_cleanup_tmp)
+
+
+# Dictionary to store video metadata by URL
+class VideoMetadata(TypedDict):
+    """Metadata for a YouTube video."""
+
+    url: str
+    title: str
+    runtime: int  # in seconds
+    runtime_str: str  # formatted as H:MM:SS or M:SS
 
 
 # Regex to extract YouTube video ID
@@ -99,6 +112,28 @@ _VALID_YT_PLAYLIST_URL = re.compile(
 )
 
 
+def extract_metadata(data: dict[str, Any]) -> VideoMetadata:
+    """Takes the dict from youtube, makes a metadata object, and stores it on disk."""
+    url = cast("str", data.get("url"))
+    title = cast("str", data.get("title")) or url
+    duration_s = cast("int", data.get("duration")) or 0
+
+    meta: VideoMetadata = VideoMetadata(
+        url=url,
+        title=title,
+        runtime=duration_s,
+        runtime_str=sec_to_string(duration_s),
+    )
+
+    # dump JSON
+    meta_path = get_metadata_path(url)
+    meta_path.parent.mkdir(parents=True, exist_ok=True)
+    meta_path.write_text(json.dumps(meta), encoding="utf-8")
+    logger.debug("Cached metadata to %s", meta_path)
+
+    return meta
+
+
 def is_valid_youtube_url(url: str) -> bool:
     """Check if a URL is a valid YouTube video URL."""
     return _VALID_YT_URL_RE.match(url) is not None
@@ -125,6 +160,14 @@ def get_temp_paths(url: str) -> tuple[Path, Path]:
     opus_tmp = audio_tmp_dir / f"{base}.opus.part"
     pcm_tmp = audio_tmp_dir / f"{base}.pcm.part"
     return opus_tmp, pcm_tmp
+
+
+def get_metadata_path(url: str) -> Path:
+    """Returns the metadata file path for a url."""
+    vid = get_video_id(url)
+    base = vid or url.replace("/", "_")
+    filename = f"{base}_metadata.json"
+    return audio_cache_dir / filename
 
 
 def is_valid_youtube_playlist(url: str) -> bool:

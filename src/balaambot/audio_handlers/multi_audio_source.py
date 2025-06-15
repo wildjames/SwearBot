@@ -12,9 +12,12 @@ from typing import TypedDict
 
 from discord import AudioSource
 
-from balaambot.audio_handlers.youtube_audio import fetch_audio_pcm
-from balaambot.audio_handlers.youtube_utils import get_audio_pcm
 from balaambot.config import DISCORD_VOICE_CLIENT
+
+# TODO: Refactor so that the mixer is agnostic to youtube or files.
+# They're the same under the hood anyway
+from balaambot.youtube.audio import fetch_audio_pcm
+from balaambot.youtube.utils import get_audio_pcm
 
 logger = logging.getLogger(__name__)
 
@@ -401,7 +404,7 @@ class MultiAudioSource(AudioSource):
                 before_play=before_play,
                 after_play=after_play,
             )
-            self._compute_normalisation_factor(track)
+            # self._compute_normalisation_factor(track)
             self._tracks.append(track)
 
         logger.info("Loaded data for URL: %s", url)

@@ -4,12 +4,15 @@ from collections.abc import Callable
 from discord.channel import CategoryChannel, ForumChannel
 
 from balaambot import discord_utils, utils
-from balaambot.audio_handlers.youtube_audio import (
+from balaambot.youtube.audio import (
+    fetch_cached_youtube_track_metadata,
     get_youtube_track_metadata,
-    video_metadata,
 )
-from balaambot.audio_handlers.youtube_utils import get_cache_path, get_temp_paths
-from balaambot.schedulers.youtube_download_worker import download_and_convert
+from balaambot.youtube.download_worker import (
+    download_and_convert,
+    get_metadata,
+)
+from balaambot.youtube.utils import get_cache_path, get_temp_paths
 
 # TODO: This should maintain a "playing" state so we can pause and resume playback
 
@@ -48,6 +51,9 @@ async def add_to_queue(
             youtube_queue.pop(vc.guild.id, None)
             raise
 
+    # dispatch a subprocess that fetches the metadata to a file
+    vc.loop.run_in_executor(utils.FUTURES_EXECUTOR, get_metadata, logger, url)
+
 
 async def _maybe_preload_next_tracks(
     vc: discord_utils.DISCORD_VOICE_CLIENT,
@@ -73,6 +79,7 @@ async def _maybe_preload_next_tracks(
             await vc.loop.run_in_executor(
                 utils.FUTURES_EXECUTOR,
                 download_and_convert,
+                logger,
                 url,
                 opus_tmp,
                 pcm_tmp,
@@ -113,7 +120,7 @@ def create_before_after_functions(
             if channel is not None and not isinstance(
                 channel, (ForumChannel, CategoryChannel)
             ):
-                track = video_metadata.get(url)
+                track = fetch_cached_youtube_track_metadata(url)
                 content = "Playing next track"
                 if track:
                     content = f"▶️    Now playing **[{track['title']}]({track['url']})**"
@@ -141,7 +148,7 @@ def create_before_after_functions(
         # Schedule the next track when this one finishes
         logger.info("Finished playing %s for guild_id=%s", url, vc.guild.id)
         try:
-            vc.loop.create_task(_play_next(vc))
+            vc.loop.create_task(_play_next(vc, text_channel=text_channel))
         except Exception:
             logger.exception(
                 "Failed to schedule next track for guild_id=%s", vc.guild.id
@@ -165,14 +172,15 @@ async def _play_next(
     url = queue[0]
     logger.info("Starting playback of %s for guild_id=%s", url, vc.guild.id)
 
-    # TODO: This should be done before now, probably
     await get_youtube_track_metadata(url)
 
     _before_play, _after_play = create_before_after_functions(url, vc, text_channel)
 
     try:
         mixer = discord_utils.get_mixer_from_voice_client(vc)
+        # TODO: refactor to not need a youtube-specific method on the mixer
         await mixer.play_youtube(url, before_play=_before_play, after_play=_after_play)
+
         # After transmitting silence, discord stops calling the read() method.
         # So, we need to call the play method again to get it going again.
         if not vc.is_playing():

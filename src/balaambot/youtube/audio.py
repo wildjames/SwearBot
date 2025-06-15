@@ -1,35 +1,26 @@
 import asyncio
+import json
 import logging
 from pathlib import Path
-from typing import Any, TypedDict, cast
+from typing import Any, cast
 
-from yt_dlp import DownloadError, YoutubeDL  # type: ignore[import]
+from yt_dlp import DownloadError, YoutubeDL
 
 from balaambot import utils
-from balaambot.audio_handlers.youtube_utils import (
+from balaambot.youtube.utils import (
     DEFAULT_CHANNELS,
     DEFAULT_SAMPLE_RATE,
+    VideoMetadata,
     check_is_playlist,
+    extract_metadata,
     get_cache_path,
+    get_metadata_path,
     get_temp_paths,
     is_valid_youtube_url,
 )
 
 logger = logging.getLogger(__name__)
 
-
-# Dictionary to store video metadata by URL
-class VideoMetadata(TypedDict):
-    """Metadata for a YouTube video."""
-
-    url: str
-    title: str
-    runtime: int  # in seconds
-    runtime_str: str  # formatted as H:MM:SS or M:SS
-
-
-# Keyed by URL, values are VideoMetadata
-video_metadata: dict[str, VideoMetadata] = {}
 
 # This will hold the upcoming tracks metadata
 youtube_queue: list[VideoMetadata] = []
@@ -38,56 +29,72 @@ youtube_queue: list[VideoMetadata] = []
 _download_locks: dict[str, asyncio.Lock] = {}
 
 
-async def get_youtube_track_metadata(url: str) -> VideoMetadata | None:
-    """Get the track metadata from a YouTube URL."""
+async def get_youtube_track_metadata(url: str) -> VideoMetadata:
+    """Get the track metadata from a YouTube URL, caching to JSON files."""
     # quick URL validation
     if not is_valid_youtube_url(url):
-        logger.debug("Invalid YouTube URL: %s", url)
-        return None
+        msg = "Invalid YouTube URL: %s"
+        raise ValueError(msg, url)
 
-    # return cached metadata if available
-    if url in video_metadata:
-        logger.info("Returning cached track metadata for '%s'", url)
-        return video_metadata[url]
+    # If it's not in memory, then check the disk
+    meta_path = get_metadata_path(url)
+    # load from JSON cache if available
+    if meta_path.exists():
+        data = json.loads(meta_path.read_text(encoding="utf-8"))
+        data = cast("VideoMetadata", data)
+        logger.info("Loaded metadata from cache: '%s'", meta_path)
+        return data
 
-    logger.info("Fetching track metadata, but not already cached. URL: '%s'", url)
+    logger.info("Fetching track metadata for URL: '%s'", url)
 
     ydl_opts = {
         "quiet": True,
         "skip_download": True,
-        "extract_flat": True,  # faster metadata-only extraction
+        "extract_flat": True,
     }
 
-    # run blocking extraction in thread
+    # This should run in a subprocess
     def _extract_info(opts: dict[str, Any], target_url: str) -> dict[str, Any] | None:
         with YoutubeDL(opts) as ydl:
             return ydl.extract_info(target_url, download=False)  # type: ignore[no-typing]
 
-    try:
-        info = await asyncio.to_thread(_extract_info, ydl_opts, url)
-    except DownloadError as e:
-        logger.warning("yt-dlp failed to extract info for %s: %s", url, e)
-        return None
-    except Exception:
-        logger.exception("Unexpected error fetching metadata for %s", url)
-        return None
+    info = await asyncio.to_thread(_extract_info, ydl_opts, url)
 
     if not info:
-        return None
+        msg = "Failed to get youtube metadata"
+        raise ValueError(msg)
 
-    # pull out title and duration (seconds)
     title = cast("str", info.get("title")) or url  # type: ignore[no-typing]
     duration_s = cast("int", info.get("duration")) or 0  # type: ignore[no-typing]
 
-    # cache and return
-    video_metadata[url] = VideoMetadata(
+    meta: VideoMetadata = VideoMetadata(
         url=url,
         title=title,
         runtime=duration_s,
         runtime_str=utils.sec_to_string(duration_s),
     )
-    logger.debug("Cached metadata for %s: %s", url, video_metadata[url])
-    return video_metadata[url]
+
+    # ensure directory exists and write JSON
+    meta_path.parent.mkdir(parents=True, exist_ok=True)
+    meta_path.write_text(json.dumps(meta), encoding="utf-8")
+    logger.debug("Cached metadata to %s", meta_path)
+
+    return meta
+
+
+def fetch_cached_youtube_track_metadata(url: str) -> VideoMetadata:
+    """Fetch cached track metadata from the disk. If it's not found, throw an  error."""
+    # If it's not in memory, then check the disk
+    meta_path = get_metadata_path(url)
+    # load from JSON cache if available
+    if meta_path.exists():
+        data = json.loads(meta_path.read_text(encoding="utf-8"))
+        data = cast("VideoMetadata", data)
+        logger.info("Loaded metadata from cache: '%s'", meta_path)
+        return data
+
+    msg = "No metadata cached for url '%s'", url
+    raise FileNotFoundError(msg)
 
 
 async def fetch_audio_pcm(
@@ -254,8 +261,12 @@ async def get_playlist_video_urls(playlist_url: str) -> list[str]:
         vid_id = entry.get("id")
         if not vid_id:
             continue
+
         # build a standard watch URL
         video_urls.append(f"https://www.youtube.com/watch?v={vid_id}")
+
+        # Store the metadata for each track
+        extract_metadata(entry)
 
     return video_urls
 

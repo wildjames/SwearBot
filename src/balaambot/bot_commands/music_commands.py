@@ -6,9 +6,11 @@ from discord import Client, InteractionCallbackResponse, app_commands
 from discord.ext import commands
 from discord.ui import Button, View
 
-from balaambot import discord_utils, utils
-from balaambot.audio_handlers import youtube_audio, youtube_utils
-from balaambot.schedulers import youtube_jobs
+from balaambot import discord_utils
+from balaambot.utils import sec_to_string
+from balaambot.youtube import audio as yt_audio
+from balaambot.youtube import jobs as yt_jobs
+from balaambot.youtube import utils as yt_utils
 
 logger = logging.getLogger(__name__)
 
@@ -80,13 +82,13 @@ class MusicCommands(commands.Cog):
         query = query.strip()
 
         # Handle playlist URLs
-        if youtube_utils.is_valid_youtube_playlist(query):
+        if yt_utils.is_valid_youtube_playlist(query):
             logger.info("Received play command for playlist URL: '%s'", query)
             self.bot.loop.create_task(self.do_play_playlist(interaction, query))
             return
 
         # Handle youtube videos
-        if youtube_utils.is_valid_youtube_url(query):
+        if yt_utils.is_valid_youtube_url(query):
             logger.info("Received play command for URL: '%s'", query)
             self.bot.loop.create_task(self.do_play(interaction, query))
             return
@@ -117,7 +119,7 @@ class MusicCommands(commands.Cog):
             return
         vc, mixer = vc_mixer
 
-        results = await youtube_audio.search_youtube(query)
+        results = await yt_audio.search_youtube(query)
         # Each result is a tuple: (url, title, duration_in_seconds)
 
         if not results:
@@ -129,7 +131,7 @@ class MusicCommands(commands.Cog):
         # Build a text block describing each result line by line
         lines: list[str] = []
         for idx, (_, title, duration_secs) in enumerate(results):
-            duration_str = utils.sec_to_string(duration_secs)
+            duration_str = sec_to_string(duration_secs)
             lines.append(f"**{idx + 1}.** {title} ({duration_str})")
 
         description = (
@@ -155,21 +157,18 @@ class MusicCommands(commands.Cog):
         vc, mixer = vc_mixer
 
         # Fetch playlist video URLs
-        track_urls = await youtube_audio.get_playlist_video_urls(playlist_url)
+        track_urls = await yt_audio.get_playlist_video_urls(playlist_url)
         if not track_urls:
             return await interaction.followup.send(
                 "Failed to fetch playlist or playlist is empty.", ephemeral=True
             )
 
         # Enqueue all tracks and start background fetches
-        # TODO: Also fetch the track metadata here too.
-        # promises = []
         for track_url in track_urls:
             # These have to be awaited, to preserve order.
-            await youtube_jobs.add_to_queue(
+            await yt_jobs.add_to_queue(
                 vc, track_url, text_channel=interaction.channel_id
             )
-            # promises.append(youtube_audio.get_youtube_track_metadata(track_url))
 
         # Confirmation message
         await interaction.followup.send(
@@ -187,9 +186,9 @@ class MusicCommands(commands.Cog):
         vc, mixer = vc_mixer
 
         # Add to queue. Playback (in mixer) will await cache when it's time
-        await youtube_jobs.add_to_queue(vc, url, text_channel=interaction.channel_id)
+        await yt_jobs.add_to_queue(vc, url, text_channel=interaction.channel_id)
 
-        track_meta = await youtube_audio.get_youtube_track_metadata(url)
+        track_meta = await yt_audio.get_youtube_track_metadata(url)
         if track_meta is None:
             await interaction.followup.send(
                 f"Failed to fetch track metadata. Please check the URL. [{url}]",
@@ -197,7 +196,7 @@ class MusicCommands(commands.Cog):
             )
             return
 
-        queue = await youtube_jobs.list_queue(vc)
+        queue = await yt_jobs.list_queue(vc)
         pos = len(queue)
 
         runtime = track_meta["runtime_str"]
@@ -233,7 +232,7 @@ class MusicCommands(commands.Cog):
             interaction.guild,
             member.voice.channel,
         )
-        upcoming = await youtube_jobs.list_queue(vc)
+        upcoming = await yt_jobs.list_queue(vc)
 
         if not upcoming:
             msg = "The queue is empty."
@@ -241,23 +240,17 @@ class MusicCommands(commands.Cog):
             lines: list[str] = []
             total_runtime = 0
 
-            for i, url in enumerate(upcoming):
-                track_meta = await youtube_audio.get_youtube_track_metadata(url)
-                if track_meta is None:
-                    new_line = f"{i + 1}. [Invalid track URL]({url})"
-                else:
+            for i, url in enumerate(upcoming[:10]):
+                new_line = f"{i + 1}. [Invalid track URL]({url})"
+                track_meta = await yt_audio.get_youtube_track_metadata(url)
+                if track_meta is not None:
                     new_line = (
                         f"{i + 1}. {track_meta['title']} ({track_meta['runtime_str']})"
                     )
                     total_runtime += track_meta["runtime"]
+                lines.append(new_line)
 
-                if (
-                    sum([len(s) for s in lines]) + len(new_line) + 100
-                    < discord_utils.MAX__MESSAGE_LENGTH
-                ):
-                    lines.append(new_line)
-
-            track_meta = await youtube_audio.get_youtube_track_metadata(upcoming[0])
+            track_meta = await yt_audio.get_youtube_track_metadata(upcoming[0])
             if track_meta is None:
                 lines[0] = f"**Now playing:** [Invalid track URL]({upcoming[0]})"
             else:
@@ -266,10 +259,13 @@ class MusicCommands(commands.Cog):
                     f"[{track_meta['title']}]({track_meta['url']})"
                     f" ({track_meta['runtime_str']})"
                 )
-            msg = "**Upcoming tracks:**\n" + "\n".join(lines)
+            msg = (
+                f"**Upcoming tracks ({len(lines)} of {len(upcoming)} shown):**\n"
+                + "\n".join(lines)
+            )
 
             # format runtime as H:MM:SS or M:SS
-            total_runtime_str = utils.sec_to_string(total_runtime)
+            total_runtime_str = sec_to_string(total_runtime)
             msg += f"\n\n🔮    Total runtime: {total_runtime_str}"
 
         await interaction.followup.send(msg, ephemeral=True)
@@ -298,17 +294,17 @@ class MusicCommands(commands.Cog):
             interaction.guild,
             member.voice.channel,
         )
-        await youtube_jobs.skip(vc)
+        await yt_jobs.skip(vc)
         logger.info("Skipped track for guild_id=%s", interaction.guild.id)
 
-        track_url = youtube_jobs.get_current_track(vc)
+        track_url = yt_jobs.get_current_track(vc)
         if not track_url:
             await interaction.followup.send(
                 "No track is currently playing.", ephemeral=True
             )
             return
 
-        track_meta = await youtube_audio.get_youtube_track_metadata(track_url)
+        track_meta = await yt_audio.get_youtube_track_metadata(track_url)
         if track_meta is None:
             await interaction.followup.send(
                 f"Failed to fetch track metadata. Please check the URL. [{track_url}]",
@@ -316,7 +312,7 @@ class MusicCommands(commands.Cog):
             )
             return
         await interaction.followup.send(
-            f"⏭️    Skipped to next track: [{track_meta['title']}]({track_meta['url']})",
+            "⏭️    Skipped to next track",
             ephemeral=False,
         )
 
@@ -346,7 +342,7 @@ class MusicCommands(commands.Cog):
             interaction.guild,
             member.voice.channel,
         )
-        await youtube_jobs.stop(vc)
+        await yt_jobs.stop(vc)
         await interaction.response.send_message(
             "⏹️    Stopped and cleared YouTube queue.", ephemeral=False
         )
@@ -376,8 +372,8 @@ class MusicCommands(commands.Cog):
         logger.info("Clearing YouTube queue for guild_id=%s", interaction.guild.id)
 
         # Clear the queue
-        await youtube_jobs.clear_queue(vc)
-        current_queue = await youtube_jobs.list_queue(vc)
+        await yt_jobs.clear_queue(vc)
+        current_queue = await yt_jobs.list_queue(vc)
         logger.info("queue after clearing: %s", current_queue)
 
         await interaction.response.send_message(
