@@ -9,8 +9,11 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# Discord provides a nice default coloured log format
+discord.utils.setup_logging(level=logging.DEBUG)
+# Discord gets very spammy on DEBUG
+logging.getLogger("discord").setLevel(logging.INFO)
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.DEBUG)
 
 DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN")
 
