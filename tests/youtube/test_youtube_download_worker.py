@@ -176,18 +176,18 @@ def test_get_metadata_success(monkeypatch, tmp_path):
 
     meta = get_metadata(get_dummy_logger(), "http://example.com/video")
 
-    assert isinstance(meta, VideoMetadata)
-    assert meta.url == "http://example.com/video"
-    assert meta.title == "Test Title"
-    assert meta.runtime == 42
-    assert meta.runtime_str == "42s"
+    assert isinstance(meta, dict)
+    assert meta["url"] == "http://example.com/video"
+    assert meta["title"] == "Test Title"
+    assert meta["runtime"] == 42
+    assert meta["runtime_str"] == "42s"
 
     data = json.loads(meta_path.read_text(encoding='utf-8'))
     assert data == {
-        'url': meta.url,
-        'title': meta.title,
-        'runtime': meta.runtime,
-        'runtime_str': meta.runtime_str
+        'url': meta["url"],
+        'title': meta["title"],
+        'runtime': meta["runtime"],
+        'runtime_str': meta["runtime_str"]
     }
 
 
