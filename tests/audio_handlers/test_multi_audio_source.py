@@ -246,52 +246,26 @@ async def test_ensure_mixer_multiple_guilds(monkeypatch):
     assert vc1b.played == []
 
 
-@pytest.mark.asyncio
-async def test_play_youtube_success(monkeypatch):
+def test_play_pcm_success(tmp_path):
     vc = MockVoiceChat()
     src = MultiAudioSource(vc)
-    url = "yt://test"
-    # prepare dummy PCM bytes: two int16 samples: [3, 4]
-    pcm_bytes = b"\x03\x00\x04\x00"
-    calls = []
+    pcm = tmp_path / "track.pcm"
+    pcm.write_bytes(b"\x03\x00\x04\x00")
 
-    async def fake_fetch(url_in, sample_rate, channels, username, password):
-        calls.append((url_in, sample_rate, channels, username, password))
+    src.play_pcm(str(pcm))
 
-    monkeypatch.setattr(mas, "fetch_audio_pcm", fake_fetch)
-    monkeypatch.setattr(mas, "get_audio_pcm", lambda u: pcm_bytes if u == url else None)
-
-    await src.play_youtube(url, username="u", password="p", after_play=None)
-
-    # fetch_audio_pcm was awaited with correct args
-    assert calls == [(url, src.SAMPLE_RATE, src.CHANNELS, "u", "p")]
-
-    # One track enqueued
     assert len(src._tracks) == 1
     track = src._tracks[0]
-    assert isinstance(track["samples"], array.array)
     assert track["samples"].tolist() == [3, 4]
     assert track["pos"] == 0
     assert src._stopped is False
 
 
-@pytest.mark.asyncio
-async def test_play_youtube_missing_cache(monkeypatch):
+def test_play_pcm_file_not_found():
     vc = MockVoiceChat()
     src = MultiAudioSource(vc)
-    url = "yt://missing"
-
-    async def fake_fetch(url_in, sample_rate, channels, username, password):
-        # no-op
-        return
-
-    monkeypatch.setattr(mas, "fetch_audio_pcm", fake_fetch)
-    monkeypatch.setattr(mas, "get_audio_pcm", lambda u: None)
-
-    with pytest.raises(RuntimeError) as exc:
-        await src.play_youtube(url)
-    # error message should mention the URL and "missing"
-    assert f"Cached file for {url} missing" in str(exc.value)
+    with pytest.raises(FileNotFoundError):
+        src.play_pcm("/does/not/exist.pcm")
 
 
 def test_mix_samples_with_callback_and_padding(monkeypatch):

@@ -6,6 +6,7 @@ from discord.channel import CategoryChannel, ForumChannel
 from balaambot import discord_utils, utils
 from balaambot.youtube.download import (
     download_and_convert,
+    fetch_audio_pcm,
     get_metadata,
 )
 from balaambot.youtube.metadata import (
@@ -178,8 +179,16 @@ async def _play_next(
 
     try:
         mixer = discord_utils.get_mixer_from_voice_client(vc)
-        # TODO: refactor to not need a youtube-specific method on the mixer
-        await mixer.play_youtube(url, before_play=_before_play, after_play=_after_play)
+        cache_path = await fetch_audio_pcm(
+            url,
+            sample_rate=mixer.SAMPLE_RATE,
+            channels=mixer.CHANNELS,
+        )
+        mixer.play_pcm(
+            str(cache_path),
+            before_play=_before_play,
+            after_play=_after_play,
+        )
 
         # After transmitting silence, discord stops calling the read() method.
         # So, we need to call the play method again to get it going again.

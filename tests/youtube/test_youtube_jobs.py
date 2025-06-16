@@ -2,6 +2,7 @@
 import asyncio
 
 import pytest
+from pathlib import Path
 
 import balaambot.youtube.jobs as ytj
 from balaambot import discord_utils, utils
@@ -145,12 +146,18 @@ async def test_play_next_success(monkeypatch, dummy_logger):
     monkeypatch.setattr(ytj, "get_youtube_track_metadata", lambda u: asyncio.sleep(0))
     # dummy mixer
     class DummyMixer:
-        async def play_youtube(self, play_url, *, before_play=None, after_play=None):
-            assert play_url == url
+        def __init__(self):
+            self.played = []
+
+        def play_pcm(self, play_file, *, before_play=None, after_play=None):
+            self.played.append(play_file)
+            assert play_file == "/tmp/test.pcm"
             if after_play:
                 after_play()
+
     mixer = DummyMixer()
     monkeypatch.setattr(discord_utils, "get_mixer_from_voice_client", lambda vc: mixer)
+    monkeypatch.setattr(ytj, "fetch_audio_pcm", lambda *a, **k: Path("/tmp/test.pcm"))
 
     await ytj._play_next(vc)
     # queue emptied
@@ -171,13 +178,13 @@ async def test_play_next_mixer_failure(dummy_logger, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_play_next_play_youtube_raises(dummy_logger, monkeypatch):
+async def test_play_next_play_pcm_raises(dummy_logger, monkeypatch):
     vc = DummyVC(23)
     ytj.youtube_queue[23] = ["url23"]
     monkeypatch.setattr(ytj, "get_youtube_track_metadata", lambda u: asyncio.sleep(0))
 
     class Mixer:
-        async def play_youtube(self, *_):
+        def play_pcm(self, *_args, **_kwargs):
             raise RuntimeError("play error")
     monkeypatch.setattr(discord_utils, "get_mixer_from_voice_client", lambda vc: Mixer())
 
