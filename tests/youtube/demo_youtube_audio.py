@@ -1,15 +1,15 @@
 import asyncio
 import logging
 
-from balaambot.youtube.youtube_audio import (
-    fetch_audio_pcm,
+from balaambot.youtube.download import fetch_audio_pcm
+from balaambot.youtube.metadata import (
     get_playlist_video_urls,
     get_youtube_track_metadata,
     search_youtube,
 )
 from balaambot.youtube.utils import (
-    remove_audio_pcm,
     get_audio_pcm,
+    remove_audio_pcm,
 )
 
 logger = logging.getLogger(__name__)

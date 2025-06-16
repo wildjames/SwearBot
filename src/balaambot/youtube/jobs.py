@@ -4,13 +4,13 @@ from collections.abc import Callable
 from discord.channel import CategoryChannel, ForumChannel
 
 from balaambot import discord_utils, utils
-from balaambot.youtube.audio import (
-    fetch_cached_youtube_track_metadata,
-    get_youtube_track_metadata,
-)
-from balaambot.youtube.download_worker import (
+from balaambot.youtube.download import (
     download_and_convert,
     get_metadata,
+)
+from balaambot.youtube.metadata import (
+    fetch_cached_youtube_track_metadata,
+    get_youtube_track_metadata,
 )
 from balaambot.youtube.utils import get_cache_path, get_temp_paths
 
