@@ -4,6 +4,7 @@ import asyncio
 import shutil
 from uuid import uuid4
 import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -252,7 +253,7 @@ def test_play_pcm_success(tmp_path):
     pcm = tmp_path / "track.pcm"
     pcm.write_bytes(b"\x03\x00\x04\x00")
 
-    src.play_pcm(str(pcm))
+    src.play_pcm(pcm)
 
     assert len(src._tracks) == 1
     track = src._tracks[0]
@@ -265,7 +266,7 @@ def test_play_pcm_file_not_found():
     vc = MockVoiceChat()
     src = MultiAudioSource(vc)
     with pytest.raises(FileNotFoundError):
-        src.play_pcm("/does/not/exist.pcm")
+        src.play_pcm(Path("/does/not/exist.pcm"))
 
 
 def test_mix_samples_with_callback_and_padding(monkeypatch):

@@ -14,9 +14,6 @@ from discord import AudioSource
 
 from balaambot.config import DISCORD_VOICE_CLIENT
 
-# TODO: Refactor so that the mixer is agnostic to youtube or files.
-# They're the same under the hood anyway
-
 logger = logging.getLogger(__name__)
 
 # Keep one mixer per guild
@@ -354,27 +351,34 @@ class MultiAudioSource(AudioSource):
 
     def play_pcm(
         self,
-        filename: str,
-        *,
+        file_path: Path,
         before_play: Callable[[], None] | None = None,
         after_play: Callable[[], None] | None = None,
     ) -> None:
-        """Queue a pre-converted PCM file for playback as a music track."""
-        logger.info("Queueing PCM %s", filename)
+        """Queue a pre-converted PCM file for playback as a music track.
 
-        path = Path(filename)
-        if not path.is_file():
-            msg = f"{filename!r} does not exist"
+        No checks are done on file format - it's assumed to be the correct format.
+
+        Arguments:
+            file_path: The path to the file to be played
+            before_play: A callback to be triggered when playback starts
+            after_play: A callback to be triggered when playback ends
+
+        """
+        logger.info("Queueing PCM %s", file_path)
+
+        if not file_path.is_file():
+            msg = f"{file_path!r} does not exist"
             raise FileNotFoundError(msg)
 
-        pcm = path.read_bytes()
+        pcm = file_path.read_bytes()
         samples = array.array("h")
         samples.frombytes(pcm)
 
         with self._lock:
             track = Track(
                 id=uuid.uuid4(),
-                name=str(path),
+                name=str(file_path),
                 samples=samples,
                 pos=0,
                 before_play=before_play,
@@ -382,7 +386,7 @@ class MultiAudioSource(AudioSource):
             )
             self._tracks.append(track)
 
-        logger.info("Loaded data from %s", filename)
+        logger.info("Loaded data from %s", file_path)
         logger.info("Now %d tracks in mixer", len(self._tracks))
         self.resume()
 

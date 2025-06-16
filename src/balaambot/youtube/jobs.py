@@ -185,7 +185,7 @@ async def _play_next(
             channels=mixer.CHANNELS,
         )
         mixer.play_pcm(
-            str(cache_path),
+            cache_path,
             before_play=_before_play,
             after_play=_after_play,
         )
