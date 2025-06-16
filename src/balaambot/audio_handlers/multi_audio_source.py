@@ -14,11 +14,6 @@ from discord import AudioSource
 
 from balaambot.config import DISCORD_VOICE_CLIENT
 
-# TODO: Refactor so that the mixer is agnostic to youtube or files.
-# They're the same under the hood anyway
-from balaambot.youtube.download import fetch_audio_pcm
-from balaambot.youtube.utils import get_audio_pcm
-
 logger = logging.getLogger(__name__)
 
 # Keep one mixer per guild
@@ -354,60 +349,44 @@ class MultiAudioSource(AudioSource):
             logger.info("All tracks stopped")
         self.pause()
 
-    async def play_youtube(
+    def play_pcm(
         self,
-        url: str,
-        username: str | None = None,
-        password: str | None = None,
+        file_path: Path,
         before_play: Callable[[], None] | None = None,
         after_play: Callable[[], None] | None = None,
     ) -> None:
-        """Decode and queue audio from a YouTube URL for playback.
+        """Queue a pre-converted PCM file for playback as a music track.
 
-        Downloads or retrieves cached PCM data for the given URL, converts
-        it into a sample array, and appends it to the mixer queue.
+        No checks are done on file format - it's assumed to be the correct format.
 
-        Args:
-            url: The YouTube video URL to play.
-            username: Optional YouTube account username for private content.
-            password: Optional YouTube account password.
-            before_play: Optional callback to invoke when playback starts.
-            after_play: Optional callback to invoke when playback ends.
-
-        Raises:
-            RuntimeError: If the PCM cache is missing after decoding.
+        Arguments:
+            file_path: The path to the file to be played
+            before_play: A callback to be triggered when playback starts
+            after_play: A callback to be triggered when playback ends
 
         """
-        logger.info("Queueing YouTube %s", url)
+        logger.info("Queueing PCM %s", file_path)
 
-        await fetch_audio_pcm(
-            url,
-            sample_rate=self.SAMPLE_RATE,
-            channels=self.CHANNELS,
-            username=username,
-            password=password,
-        )
-        pcm = get_audio_pcm(url)
-        if pcm is None:
-            msg = f"Cached file for {url} missing"
-            raise RuntimeError(msg)
+        if not file_path.is_file():
+            msg = f"{file_path!r} does not exist"
+            raise FileNotFoundError(msg)
 
+        pcm = file_path.read_bytes()
         samples = array.array("h")
         samples.frombytes(pcm)
 
         with self._lock:
             track = Track(
                 id=uuid.uuid4(),
-                name=url,
+                name=str(file_path),
                 samples=samples,
                 pos=0,
                 before_play=before_play,
                 after_play=after_play,
             )
-            # self._compute_normalisation_factor(track)
             self._tracks.append(track)
 
-        logger.info("Loaded data for URL: %s", url)
+        logger.info("Loaded data from %s", file_path)
         logger.info("Now %d tracks in mixer", len(self._tracks))
         self.resume()
 
