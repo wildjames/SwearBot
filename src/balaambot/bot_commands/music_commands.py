@@ -67,6 +67,8 @@ class SearchView(View):
 class MusicCommands(commands.Cog):
     """Slash commands for YouTube queue and playback."""
 
+    MAX_QUEUE_REPORT_LENGTH = 10
+
     def __init__(self, bot: commands.Bot) -> None:
         """Initialize the MusicCommands cog."""
         self.bot = bot
@@ -240,7 +242,7 @@ class MusicCommands(commands.Cog):
             lines: list[str] = []
             total_runtime = 0
 
-            for i, url in enumerate(upcoming[:10]):
+            for i, url in enumerate(upcoming):
                 new_line = f"{i + 1}. [Invalid track URL]({url})"
                 track_meta = await yt_audio.get_youtube_track_metadata(url)
                 if track_meta is not None:
@@ -248,7 +250,8 @@ class MusicCommands(commands.Cog):
                         f"{i + 1}. {track_meta['title']} ({track_meta['runtime_str']})"
                     )
                     total_runtime += track_meta["runtime"]
-                lines.append(new_line)
+                if len(lines) > self.MAX_QUEUE_REPORT_LENGTH:
+                    lines.append(new_line)
 
             track_meta = await yt_audio.get_youtube_track_metadata(upcoming[0])
             if track_meta is None:
