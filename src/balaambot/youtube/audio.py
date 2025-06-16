@@ -93,7 +93,7 @@ def fetch_cached_youtube_track_metadata(url: str) -> VideoMetadata:
         logger.info("Loaded metadata from cache: '%s'", meta_path)
         return data
 
-    msg = "No metadata cached for url '%s'", url
+    msg = f"No metadata cached for url '{url}'"
     raise FileNotFoundError(msg)
 
 
