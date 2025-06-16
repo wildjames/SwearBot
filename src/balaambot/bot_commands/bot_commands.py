@@ -4,7 +4,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from balaambot.discord_utils import ensure_connected
+from balaambot.discord_utils import ensure_connected, require_voice_channel
 from balaambot.sfx.audio_sfx_jobs import stop_all_jobs as sfx_stop
 from balaambot.youtube.jobs import stop as yt_stop
 
@@ -23,25 +23,11 @@ class BotControlCommands(commands.Cog):
     )
     async def stop(self, interaction: discord.Interaction) -> None:
         """Stop the bot and leave the voice channel."""
-        if interaction.guild is None:
-            await interaction.response.send_message(
-                "This command only works in a server.", ephemeral=True
-            )
+        channel_member = await require_voice_channel(interaction)
+        if channel_member is None:
             return
-
-        member = interaction.guild.get_member(interaction.user.id)
-        if (
-            not member
-            or not member.voice
-            or not member.voice.channel
-            or not isinstance(member.voice.channel, discord.VoiceChannel)
-        ):
-            await interaction.response.send_message(
-                "You need to be in a standard voice channel to add a job.",
-                ephemeral=True,
-            )
-            return
-        vc = await ensure_connected(interaction.guild, member.voice.channel)
+        channel, _member = channel_member
+        vc = await ensure_connected(interaction.guild, channel)
 
         await sfx_stop(vc)
         await yt_stop(vc)

@@ -21,7 +21,7 @@ These are things that will likely take over an hour
   - [ ] tentatively solved. Needs thorough testing though
 - [ ] Should we stream opus data rather than PCM?
 - [ ] Youtube age restricts some content, so I need to implement auth
-- [ ] Commands need to have guard clauses abstracted out into some discord utility functions
+ - [x] Commands need to have guard clauses abstracted out into some discord utility functions
 - [ ] Add a way to scrub the currently playing track?
 - [ ] Separate and optimize CI pipelines more
   - [x] Separate the CI pipeline and use the dedicated pipelines instead

@@ -7,6 +7,8 @@ from balaambot.discord_utils import (
     get_mixer_from_interaction,
     get_mixer_from_voice_client,
     get_voice_channel_mixer,
+    require_guild,
+    require_voice_channel,
 )
 
 # --- Dummy classes to simulate discord.py objects ---
@@ -67,6 +69,22 @@ class DummyFollowup:
         self.sent.append((message, ephemeral))
 
 
+class DummyResponse:
+    def __init__(self):
+        self.sent: list[tuple[str, bool]] = []
+        self._done = False
+
+    async def send_message(self, message, ephemeral=False):
+        self.sent.append((message, ephemeral))
+        self._done = True
+
+    async def defer(self, thinking=False, ephemeral=False):
+        self._done = True
+
+    def is_done(self):
+        return self._done
+
+
 class DummyUser:
     def __init__(self, user_id):
         self.id = user_id
@@ -77,11 +95,13 @@ class DummyInteraction:
         self.guild = guild
         self.user = user
         self.followup = DummyFollowup()
+        self.response = DummyResponse()
 
 
 # ---------------------------------------------------------------------------
 # Tests for ensure_connected
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_ensure_connected_no_existing_vc(monkeypatch):
@@ -147,6 +167,7 @@ async def test_ensure_connected_connected_diff_channel(monkeypatch):
 # ---------------------------------------------------------------------------
 # Existing tests for get_mixer_from_interaction
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_get_mixer_from_interaction_no_guild():
@@ -223,6 +244,7 @@ async def test_get_mixer_from_interaction_failed_ensure_sends_and_raises(monkeyp
 # Tests for get_mixer_from_voice_client
 # ---------------------------------------------------------------------------
 
+
 def test_get_mixer_from_voice_client_failed_ensure(monkeypatch):
     vc = DummyVoiceClient()
 
@@ -253,6 +275,7 @@ def test_get_mixer_from_voice_client_success(monkeypatch):
 # Tests for get_voice_channel_mixer
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_get_voice_channel_mixer_no_guild():
     interaction = DummyInteraction(guild=None, user=DummyUser(1))
@@ -272,9 +295,7 @@ async def test_get_voice_channel_mixer_user_not_in_channel():
     interaction = DummyInteraction(guild, DummyUser(1))
 
     result = await get_voice_channel_mixer(interaction)
-    assert interaction.followup.sent == [
-        ("Join a voice channel first.", True)
-    ]
+    assert interaction.followup.sent == [("Join a voice channel first.", True)]
     assert result is None
 
 
@@ -288,16 +309,69 @@ async def test_get_voice_channel_mixer_success(monkeypatch):
     interaction = DummyInteraction(guild, DummyUser(1))
 
     dummy_mixer = DummyMixer()
+
     async def fake_ensure(g, ch):
         assert g is guild and ch is channel
         return vc
+
     def fake_get_mixer(vcin):
         assert vcin is vc
         return dummy_mixer
 
     monkeypatch.setattr(discord_utils, "ensure_connected", fake_ensure)
     monkeypatch.setattr(discord_utils, "get_mixer_from_voice_client", fake_get_mixer)
-    monkeypatch.setattr(discord_utils.discord, "VoiceChannel", DummyChannel, raising=False)
+    monkeypatch.setattr(
+        discord_utils.discord, "VoiceChannel", DummyChannel, raising=False
+    )
 
     result = await get_voice_channel_mixer(interaction)
     assert result == (vc, dummy_mixer)
+
+
+# ---------------------------------------------------------------------------
+# Tests for require_guild and require_voice_channel
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_require_guild_none():
+    interaction = DummyInteraction(guild=None, user=DummyUser(1))
+    result = await require_guild(interaction)
+    # Should send ephemeral message
+    assert interaction.response.sent == [("This command only works in a server.", True)]
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_require_guild_returns_guild():
+    guild = DummyGuild()
+    interaction = DummyInteraction(guild, DummyUser(1))
+    result = await require_guild(interaction)
+    assert result is guild
+
+
+@pytest.mark.asyncio
+async def test_require_voice_channel_no_member():
+    guild = DummyGuild(members={})
+    interaction = DummyInteraction(guild, DummyUser(1))
+    result = await require_voice_channel(interaction)
+    assert interaction.response.sent == [
+        ("You need to be in a standard voice channel to use this command.", True)
+    ]
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_require_voice_channel_success(monkeypatch):
+    vc = DummyVoiceClient()
+    channel = DummyChannel(vc)
+    member = DummyMember(user_id=1, voice=DummyVoice(channel=channel))
+    guild = DummyGuild(members={1: member})
+    interaction = DummyInteraction(guild, DummyUser(1))
+
+    monkeypatch.setattr(
+        discord_utils.discord, "VoiceChannel", DummyChannel, raising=False
+    )
+
+    result = await require_voice_channel(interaction)
+    assert result == (channel, member)

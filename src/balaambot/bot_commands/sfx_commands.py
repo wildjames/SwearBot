@@ -43,28 +43,12 @@ class SFXCommands(commands.Cog):
         max_interval: float,
     ) -> None:
         """Add a scheduled sound effect (SFX) job to the server."""
-        if interaction.guild is None:
-            await interaction.response.send_message(
-                "This command only works in a server.", ephemeral=True
-            )
+        channel_member = await discord_utils.require_voice_channel(interaction)
+        if channel_member is None:
             return
+        channel, _member = channel_member
 
-        member = interaction.guild.get_member(interaction.user.id)
-        if (
-            not member
-            or not member.voice
-            or not member.voice.channel
-            or not isinstance(member.voice.channel, discord.VoiceChannel)
-        ):
-            await interaction.response.send_message(
-                "You need to be in a standard voice channel to add a job.",
-                ephemeral=True,
-            )
-            return
-
-        vc = await discord_utils.ensure_connected(
-            interaction.guild, member.voice.channel
-        )
+        vc = await discord_utils.ensure_connected(interaction.guild, channel)
         try:
             job_id = await audio_sfx_jobs.add_job(vc, sound, min_interval, max_interval)
             message = (
@@ -81,10 +65,7 @@ class SFXCommands(commands.Cog):
     @app_commands.describe(job_id="The ID of the job to remove")
     async def remove_sfx(self, interaction: discord.Interaction, job_id: str) -> None:
         """Remove a scheduled SFX job using its job identifier."""
-        if interaction.guild is None:
-            await interaction.response.send_message(
-                "This command only works in a server.", ephemeral=True
-            )
+        if await discord_utils.require_guild(interaction) is None:
             return
 
         try:
@@ -100,15 +81,13 @@ class SFXCommands(commands.Cog):
     @app_commands.command(name="list_sfx_jobs", description="List active SFX jobs")
     async def list_sfx_jobs(self, interaction: discord.Interaction) -> None:
         """Send a list of active jobs in the server."""
-        if interaction.guild is None:
-            await interaction.response.send_message(
-                "This command only works in a server.", ephemeral=True
-            )
+        guild = await discord_utils.require_guild(interaction)
+        if guild is None:
             return
 
         jobs: list[str] = []
         for jid, (vc, _task, sound, mi, ma) in audio_sfx_jobs.loop_jobs.items():
-            if vc.guild.id == interaction.guild.id:
+            if vc.guild.id == guild.id:
                 jobs.append(f"`{jid}`: `{sound}` every {mi:.1f}-{ma:.1f}s")
 
         if not jobs:
@@ -124,10 +103,7 @@ class SFXCommands(commands.Cog):
     async def list_sfx(self, interaction: discord.Interaction) -> None:
         """List all available sound effects."""
         await interaction.response.defer(thinking=True)
-        if interaction.guild is None:
-            await interaction.followup.send(
-                "This command only works in a server.", ephemeral=True
-            )
+        if await discord_utils.require_guild(interaction) is None:
             return
 
         sound_files = audio_sfx_jobs.SOUND_FILES
@@ -150,31 +126,15 @@ class SFXCommands(commands.Cog):
     async def trigger_sfx(self, interaction: discord.Interaction) -> None:
         """Play a random sound effect in the voice channel."""
         await interaction.response.defer(thinking=True, ephemeral=True)
-        if interaction.guild is None:
-            await interaction.followup.send(
-                "This command can only be used in a server.", ephemeral=True
-            )
+        channel_member = await discord_utils.require_voice_channel(interaction)
+        if channel_member is None:
             return
+        channel, _member = channel_member
 
         # pick & fire off the effect
         sound = random.choice(audio_sfx_jobs.SOUND_FILES)  # noqa: S311
 
-        member = interaction.guild.get_member(interaction.user.id)
-        if (
-            not member
-            or not member.voice
-            or not member.voice.channel
-            or not isinstance(member.voice.channel, discord.VoiceChannel)
-        ):
-            await interaction.response.send_message(
-                "You need to be in a standard voice channel to add a job.",
-                ephemeral=True,
-            )
-            return
-
-        vc = await discord_utils.ensure_connected(
-            interaction.guild, member.voice.channel
-        )
+        vc = await discord_utils.ensure_connected(interaction.guild, channel)
         mixer = await discord_utils.get_mixer_from_interaction(interaction)
 
         mixer.play_file(sound)
@@ -187,10 +147,7 @@ class SFXCommands(commands.Cog):
     @app_commands.command(name="stop_sfx", description="Stop all SFX playback")
     async def stop_sfx(self, interaction: discord.Interaction) -> None:
         """Stop all sound effect playback in the voice channel."""
-        if interaction.guild is None:
-            await interaction.response.send_message(
-                "This command only works in a server.", ephemeral=True
-            )
+        if await discord_utils.require_guild(interaction) is None:
             return
 
         mixer = await discord_utils.get_mixer_from_interaction(interaction)
@@ -204,28 +161,12 @@ class SFXCommands(commands.Cog):
     @app_commands.describe(sound="Filename of the sound effect (including extension)")
     async def play_sfx(self, interaction: discord.Interaction, sound: str) -> None:
         """Play a sound effect immediately in the voice channel."""
-        if interaction.guild is None:
-            await interaction.response.send_message(
-                "This command only works in a server.", ephemeral=True
-            )
+        channel_member = await discord_utils.require_voice_channel(interaction)
+        if channel_member is None:
             return
+        channel, _member = channel_member
 
-        member = interaction.guild.get_member(interaction.user.id)
-        if (
-            not member
-            or not member.voice
-            or not member.voice.channel
-            or not isinstance(member.voice.channel, discord.VoiceChannel)
-        ):
-            await interaction.response.send_message(
-                "You need to be in a standard voice channel to add a job.",
-                ephemeral=True,
-            )
-            return
-
-        vc = await discord_utils.ensure_connected(
-            interaction.guild, member.voice.channel
-        )
+        vc = await discord_utils.ensure_connected(interaction.guild, channel)
         mixer = await discord_utils.get_mixer_from_interaction(interaction)
 
         try:
