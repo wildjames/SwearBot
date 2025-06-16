@@ -26,7 +26,7 @@ Permissions:
  - `Use Voice Activity`
  - `View Channels`
 
-Priviledged Intents:
+Privileged Intents:
  - `Message Content Intent`
 
 # Future Work

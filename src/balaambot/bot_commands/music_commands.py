@@ -95,7 +95,7 @@ class MusicCommands(commands.Cog):
 
         # Fall back to searching youtube and asking the user to select a search result
         if query:
-            logger.info("Recieved a string. Searching youtube for videos. '%s'", query)
+            logger.info("Received a string. Searching youtube for videos. '%s'", query)
             self.bot.loop.create_task(self.do_search_youtube(interaction, query))
             return
 

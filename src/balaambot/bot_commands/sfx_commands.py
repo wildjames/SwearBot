@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 # - sanitize sfx file names and find files with similar names
 # - add fuzzy search
 # - add basic file browser with discord msg buttons
-# - intergrate with soundboard api?
+# - integrate with soundboard API?
 
 
 class SFXCommands(commands.Cog):
