@@ -8,8 +8,8 @@ from discord.ui import Button, View
 
 from balaambot import discord_utils
 from balaambot.utils import sec_to_string
-from balaambot.youtube import audio as yt_audio
 from balaambot.youtube import jobs as yt_jobs
+from balaambot.youtube import metadata as yt_audio
 from balaambot.youtube import utils as yt_utils
 
 logger = logging.getLogger(__name__)

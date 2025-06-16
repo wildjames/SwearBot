@@ -16,7 +16,7 @@ from balaambot.config import DISCORD_VOICE_CLIENT
 
 # TODO: Refactor so that the mixer is agnostic to youtube or files.
 # They're the same under the hood anyway
-from balaambot.youtube.audio import fetch_audio_pcm
+from balaambot.youtube.download import fetch_audio_pcm
 from balaambot.youtube.utils import get_audio_pcm
 
 logger = logging.getLogger(__name__)
