@@ -15,10 +15,7 @@ from balaambot.audio_handlers.multi_audio_source import (
     ensure_mixer,
 )
 
-# TODO: Write tests for the audio normalisation
 
-
-# TODO: This mock is broken
 class Loop:
     def create_task(self, coro):
         pass
