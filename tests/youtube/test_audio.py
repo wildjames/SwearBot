@@ -138,7 +138,7 @@ async def test_metadata_defaults(monkeypatch, tmp_path):
 
 
 # Tests for fetch_cached_youtube_track_metadata
-def test_fetch_cached_metadata_success(monkeypatch, tmp_path):
+async def test_fetch_cached_metadata_success(monkeypatch, tmp_path):
     data = {"url": "u", "title": "t", "runtime": 1, "runtime_str": "0:01"}
     meta_file = tmp_path / "meta.json"
     meta_file.write_text(json.dumps(data), encoding="utf-8")
@@ -147,7 +147,7 @@ def test_fetch_cached_metadata_success(monkeypatch, tmp_path):
     assert result == data
 
 
-def test_fetch_cached_metadata_missing(monkeypatch):
+async def test_fetch_cached_metadata_missing(monkeypatch):
     from pathlib import Path
 
     monkeypatch.setattr(metadata, "get_metadata_path", lambda u: Path("/nonexistent"))
@@ -220,7 +220,7 @@ async def test_fetch_audio_success(monkeypatch, tmp_path):
 
 
 # Tests for _sync_download
-def test_sync_download_success(monkeypatch):
+async def test_sync_download_success(monkeypatch):
     called = {}
 
     class DummyYDL:
@@ -238,7 +238,7 @@ def test_sync_download_success(monkeypatch):
     assert called["urls"] == [url]
 
 
-def test_sync_download_propagates_error(monkeypatch):
+async def test_sync_download_propagates_error(monkeypatch):
     class DummyYDL:
         def __init__(self, opts):
             pass

@@ -10,6 +10,7 @@ FUTURES_EXECUTOR = concurrent.futures.ProcessPoolExecutor()
 
 memory_cache: dict[str, dict] = {}
 
+redis_cache = None
 if USE_REDIS:
     redis_cache = redis.Redis(
         host=ADDRESS,
@@ -27,7 +28,7 @@ async def get_cache(key: str) -> dict:
         key: The key that the data is stored under
 
     """
-    if USE_REDIS:
+    if redis_cache is not None:
         serialised = redis_cache.hget(REDIS_KEY, key)
 
         if isinstance(serialised, Awaitable):
@@ -49,7 +50,7 @@ async def set_cache(key: str, obj: dict) -> None:
         obj: The dictionary object to cache.
 
     """
-    if USE_REDIS:
+    if redis_cache is not None:
         serialised = json.dumps(obj)
         redis_cache.hset(REDIS_KEY, key, serialised)
         return
