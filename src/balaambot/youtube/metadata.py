@@ -7,6 +7,8 @@ from yt_dlp import DownloadError, YoutubeDL
 from balaambot import utils
 from balaambot.youtube.utils import (
     VideoMetadata,
+    cache_get_metadata,
+    cache_set_metadata,
     check_is_playlist,
     extract_metadata,
     is_valid_youtube_url,
@@ -22,7 +24,7 @@ async def get_youtube_track_metadata(url: str) -> VideoMetadata:
         raise ValueError(msg, url)
 
     try:
-        meta_dict = await utils.get_cache(url)
+        meta_dict = await cache_get_metadata(url)
         return VideoMetadata(**meta_dict)
 
     except KeyError:
@@ -56,7 +58,7 @@ async def get_youtube_track_metadata(url: str) -> VideoMetadata:
         runtime_str=utils.sec_to_string(duration_s),
     )
 
-    await utils.set_cache(url, dict(meta))
+    await cache_set_metadata(meta)
     logger.debug("Cached metadata for '%s'", url)
 
     return meta

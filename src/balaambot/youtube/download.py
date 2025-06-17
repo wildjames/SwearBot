@@ -13,6 +13,8 @@ from balaambot.youtube.utils import (
     DEFAULT_CHANNELS,
     DEFAULT_SAMPLE_RATE,
     VideoMetadata,
+    cache_get_metadata,
+    cache_set_metadata,
     get_cache_path,
     get_temp_paths,
 )
@@ -210,10 +212,9 @@ def download_and_convert(  # noqa: PLR0913
 
 def get_metadata(logger: logging.Logger, url: str) -> VideoMetadata:
     """Blocking helper to fetch metadata for ``url`` and cache the JSON."""
-    logger.info(utils.memory_cache)
     try:
         # Synchronously fetch from cache (utils.get_cache is async)
-        meta_dict = asyncio.run(utils.get_cache(url))
+        meta_dict = asyncio.run(cache_get_metadata(url))
         return VideoMetadata(**meta_dict)
     except KeyError:
         logger.info(
@@ -244,6 +245,6 @@ def get_metadata(logger: logging.Logger, url: str) -> VideoMetadata:
         runtime_str=sec_to_string(duration_s),
     )
 
-    asyncio.run(utils.set_cache(url, dict(meta)))
+    asyncio.run(cache_set_metadata(meta))
 
     return meta

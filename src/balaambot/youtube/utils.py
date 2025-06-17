@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, TypedDict, cast
 
 import balaambot.config
-from balaambot.utils import sec_to_string, set_cache
+from balaambot.utils import get_cache, sec_to_string, set_cache
 
 logger = logging.getLogger(__name__)
 
@@ -125,9 +125,39 @@ async def extract_metadata(data: dict[str, Any]) -> VideoMetadata:
     )
 
     logger.info("Caching data to RAM for URL '%s'", url)
-    await set_cache(url, dict(meta))
+    await cache_set_metadata(meta)
 
     return meta
+
+
+async def cache_set_metadata(meta: VideoMetadata) -> None:
+    """Cache metadata for given video by using the video ID and updating the cache."""
+    video_id = get_video_id(meta["url"])
+    await set_cache(video_id, dict(meta))
+
+
+async def cache_get_metadata(
+    url: str | None = None,
+    video_id: str | None = None,
+) -> VideoMetadata:
+    """Retrieve cached video metadata using the provided URL or video ID.
+
+    Raises:
+        ValueError: If both video_id and url are None or if the cache key is None.
+
+    """
+    if video_id is None and url is None:
+        msg = "Either video ID or url must be a string. Both were None"
+        raise ValueError(msg)
+
+    # video_id is guaranteed to be non-None if url is None
+    key = get_video_id(url) if url is not None else video_id
+    if key is None:
+        msg = "Derived key for cache is None"
+        raise ValueError(msg)
+
+    meta = await get_cache(key)
+    return VideoMetadata(**meta)
 
 
 def is_valid_youtube_url(url: str) -> bool:
@@ -135,10 +165,14 @@ def is_valid_youtube_url(url: str) -> bool:
     return _VALID_YT_URL_RE.match(url) is not None
 
 
-def get_video_id(url: str) -> str | None:
+def get_video_id(url: str) -> str:
     """Extract the video ID from a YouTube URL."""
     match = _YT_ID_RE.match(url)
-    return match.group("id") if match else None
+    if match is not None:
+        return match.group("id")
+
+    msg = f"Failed to get video ID from url '{url}'"
+    raise ValueError(msg)
 
 
 def get_cache_path(url: str, sample_rate: int, channels: int) -> Path:
