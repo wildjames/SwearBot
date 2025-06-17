@@ -8,6 +8,8 @@ These are things that will likely take over an hour
 
 # Long term TODO
 
+Unclear timelines
+
 - [ ] figure out voice listening [library](https://github.com/imayhaveborkedit/discord-ext-voice-recv)
   - [ ] check if we can capture output
   - [ ] Periodically dump data to a file which will contain the last 20 seconds of audio

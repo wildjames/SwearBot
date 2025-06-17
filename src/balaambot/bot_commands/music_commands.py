@@ -213,27 +213,12 @@ class MusicCommands(commands.Cog):
     async def list_queue(self, interaction: discord.Interaction) -> None:
         """Show the current YouTube queue for this server."""
         await interaction.response.defer(ephemeral=True, thinking=True)
-        if interaction.guild is None:
-            await interaction.followup.send(
-                "This command only works in a server.",
-                ephemeral=True,
-            )
+        channel_member = await discord_utils.require_voice_channel(interaction)
+        if channel_member is None:
             return
-        member = interaction.guild.get_member(interaction.user.id)
-        if (
-            not member
-            or not member.voice
-            or not isinstance(member.voice.channel, discord.VoiceChannel)
-        ):
-            await interaction.followup.send(
-                "You need to be in a standard voice channel to view the queue.",
-                ephemeral=True,
-            )
-            return
-        vc = await discord_utils.ensure_connected(
-            interaction.guild,
-            member.voice.channel,
-        )
+        channel, _member = channel_member
+        guild = channel.guild
+        vc = await discord_utils.ensure_connected(guild, channel)
         upcoming = await yt_jobs.list_queue(vc)
 
         if not upcoming:
@@ -277,28 +262,14 @@ class MusicCommands(commands.Cog):
     async def skip(self, interaction: discord.Interaction) -> None:
         """Stop current track and play next in queue."""
         await interaction.response.defer(ephemeral=True, thinking=True)
-        if interaction.guild is None:
-            await interaction.followup.send(
-                "This command only works in a server.", ephemeral=True
-            )
+        channel_member = await discord_utils.require_voice_channel(interaction)
+        if channel_member is None:
             return
-        member = interaction.guild.get_member(interaction.user.id)
-        if (
-            not member
-            or not member.voice
-            or not isinstance(member.voice.channel, discord.VoiceChannel)
-        ):
-            await interaction.followup.send(
-                "You need to be in a standard voice channel to skip audio.",
-                ephemeral=True,
-            )
-            return
-        vc = await discord_utils.ensure_connected(
-            interaction.guild,
-            member.voice.channel,
-        )
+        channel, _member = channel_member
+        guild = channel.guild
+        vc = await discord_utils.ensure_connected(guild, channel)
         await yt_jobs.skip(vc)
-        logger.info("Skipped track for guild_id=%s", interaction.guild.id)
+        logger.info("Skipped track for guild_id=%s", guild.id)
 
         track_url = yt_jobs.get_current_track(vc)
         if not track_url:
@@ -325,26 +296,12 @@ class MusicCommands(commands.Cog):
     )
     async def stop_music(self, interaction: discord.Interaction) -> None:
         """Stop the current YouTube track and clear all queued tracks."""
-        if interaction.guild is None:
-            await interaction.response.send_message(
-                "This command only works in a server.", ephemeral=True
-            )
+        channel_member = await discord_utils.require_voice_channel(interaction)
+        if channel_member is None:
             return
-        member = interaction.guild.get_member(interaction.user.id)
-        if (
-            not member
-            or not member.voice
-            or not isinstance(member.voice.channel, discord.VoiceChannel)
-        ):
-            await interaction.response.send_message(
-                "You need to be in a standard voice channel to stop music.",
-                ephemeral=True,
-            )
-            return
-        vc = await discord_utils.ensure_connected(
-            interaction.guild,
-            member.voice.channel,
-        )
+        channel, _member = channel_member
+        guild = channel.guild
+        vc = await discord_utils.ensure_connected(guild, channel)
         await yt_jobs.stop(vc)
         await interaction.response.send_message(
             "⏹️    Stopped and cleared YouTube queue.", ephemeral=False
@@ -353,26 +310,13 @@ class MusicCommands(commands.Cog):
     @app_commands.command(name="clear_queue", description="Clear the YouTube queue")
     async def clear_queue(self, interaction: discord.Interaction) -> None:
         """Remove all queued YouTube tracks."""
-        if interaction.guild is None:
-            await interaction.response.send_message(
-                "This command only works in a server.", ephemeral=True
-            )
+        channel_member = await discord_utils.require_voice_channel(interaction)
+        if channel_member is None:
             return
-        member = interaction.guild.get_member(interaction.user.id)
-        if (
-            not member
-            or not member.voice
-            or not isinstance(member.voice.channel, discord.VoiceChannel)
-        ):
-            await interaction.response.send_message(
-                "You need to be in a standard voice channel to clear the queue.",
-                ephemeral=True,
-            )
-            return
-        vc = await discord_utils.ensure_connected(
-            interaction.guild, member.voice.channel
-        )
-        logger.info("Clearing YouTube queue for guild_id=%s", interaction.guild.id)
+        channel, _member = channel_member
+        guild = channel.guild
+        vc = await discord_utils.ensure_connected(guild, channel)
+        logger.info("Clearing YouTube queue for guild_id=%s", guild.id)
 
         # Clear the queue
         await yt_jobs.clear_queue(vc)

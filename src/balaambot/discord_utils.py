@@ -8,6 +8,53 @@ from balaambot.config import DISCORD_VOICE_CLIENT
 MAX__MESSAGE_LENGTH = 2000
 
 
+async def _send_interaction_message(
+    interaction: discord.Interaction, message: str, *, ephemeral: bool = True
+) -> None:
+    """Send a message using the correct interaction method."""
+    if interaction.response.is_done():
+        await interaction.followup.send(message, ephemeral=ephemeral)
+    else:
+        await interaction.response.send_message(message, ephemeral=ephemeral)
+
+
+async def require_guild(
+    interaction: discord.Interaction,
+) -> discord.Guild | None:
+    """Ensure the interaction was triggered inside a guild."""
+    if interaction.guild is None:
+        await _send_interaction_message(
+            interaction, "This command only works in a server.", ephemeral=True
+        )
+        return None
+    return interaction.guild
+
+
+async def require_voice_channel(
+    interaction: discord.Interaction,
+) -> tuple[discord.VoiceChannel, discord.Member] | None:
+    """Ensure the user is in a voice channel and return it."""
+    guild = await require_guild(interaction)
+    if guild is None:
+        return None
+
+    member = guild.get_member(interaction.user.id)
+    if (
+        not member
+        or not member.voice
+        or not member.voice.channel
+        or not isinstance(member.voice.channel, discord.VoiceChannel)
+    ):
+        await _send_interaction_message(
+            interaction,
+            "You need to be in a standard voice channel to use this command.",
+            ephemeral=True,
+        )
+        return None
+
+    return member.voice.channel, member
+
+
 async def ensure_connected(
     guild: discord.Guild, channel: discord.VoiceChannel
 ) -> DISCORD_VOICE_CLIENT:
