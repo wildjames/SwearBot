@@ -1,7 +1,9 @@
+import json
 import pytest
 
 import balaambot.utils as utils
 from balaambot.utils import sec_to_string, get_cache, set_cache, memory_cache
+
 
 @pytest.mark.parametrize(
     "seconds,expected",
@@ -31,37 +33,87 @@ def force_memory_cache(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_set_and_get_cache_memory():
-    # Arrange
     data = {"foo": "bar", "num": 123}
 
-    # Act
     await set_cache("mykey", data)
-    # direct inspection of memory_cache:
     assert "mykey" in memory_cache
     assert memory_cache["mykey"] == data
 
-    # fetch via async get_cache
     result = await get_cache("mykey")
-
-    # Assert
     assert result == data
 
 
 @pytest.mark.asyncio
 async def test_set_overwrites_existing():
-    # Arrange
     await set_cache("dupkey", {"a": 1})
-    # Act: overwrite
     new_obj = {"a": 2, "b": 3}
     await set_cache("dupkey", new_obj)
     result = await get_cache("dupkey")
-
-    # Assert
     assert result == new_obj
 
 
 @pytest.mark.asyncio
-async def test_get_cache_missing_key_raises_value_error():
+async def test_get_cache_missing_key_raises_key_error():
     with pytest.raises(KeyError) as excinfo:
         await get_cache("no_such_key")
     assert "no_such_key" in str(excinfo.value)
+
+
+# --- Redis-backed cache tests ---
+
+class FakeRedisSync:
+    def __init__(self):
+        self.store: dict[str, str] = {}
+    def hset(self, name, key, val):
+        self.store[key] = val
+    def hget(self, name, key):
+        return self.store.get(key)
+
+
+class FakeRedisAsync(FakeRedisSync):
+    async def hget(self, name, key):
+        return super().hget(name, key)
+
+
+@pytest.mark.asyncio
+async def test_redis_set_and_get(monkeypatch):
+    # turn on Redis mode and inject fake client
+    monkeypatch.setattr(utils, "USE_REDIS", True)
+    fake = FakeRedisSync()
+    monkeypatch.setattr(utils, "redis_cache", fake)
+
+    data = {"x": 1, "y": "z"}
+    await set_cache("rkey", data)
+
+    # underlying store got the JSON
+    assert fake.store["rkey"] == json.dumps(data)
+
+    result = await get_cache("rkey")
+    assert result == data
+
+
+@pytest.mark.asyncio
+async def test_redis_hget_awaitable(monkeypatch):
+    # simulate an awaitable hget()
+    monkeypatch.setattr(utils, "USE_REDIS", True)
+    fake = FakeRedisAsync()
+    monkeypatch.setattr(utils, "redis_cache", fake)
+
+    payload = {"a": [1, 2, 3]}
+    await set_cache("akey", payload)
+    result = await get_cache("akey")
+
+    # Assert round-trip works even when hget is async
+    assert result == payload
+
+
+@pytest.mark.asyncio
+async def test_redis_missing_key_raises_value_error(monkeypatch):
+    # empty store
+    monkeypatch.setattr(utils, "USE_REDIS", True)
+    fake = FakeRedisSync()
+    monkeypatch.setattr(utils, "redis_cache", fake)
+
+    with pytest.raises(KeyError) as excinfo:
+        await get_cache("does_not_exist")
+    assert "does_not_exist" in str(excinfo.value)
