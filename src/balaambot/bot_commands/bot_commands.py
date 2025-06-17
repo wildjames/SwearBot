@@ -27,7 +27,8 @@ class BotControlCommands(commands.Cog):
         if channel_member is None:
             return
         channel, _member = channel_member
-        vc = await ensure_connected(interaction.guild, channel)
+        guild = channel.guild
+        vc = await ensure_connected(guild, channel)
 
         await sfx_stop(vc)
         await yt_stop(vc)
@@ -36,7 +37,7 @@ class BotControlCommands(commands.Cog):
 
         logger.info(
             "Bot stopped and left the voice channel for guild_id=%s",
-            interaction.guild.id,
+            guild.id,
         )
         await interaction.response.send_message(
             "🔴    Stopped and left the voice channel.",

@@ -47,8 +47,9 @@ class SFXCommands(commands.Cog):
         if channel_member is None:
             return
         channel, _member = channel_member
+        guild = channel.guild
 
-        vc = await discord_utils.ensure_connected(interaction.guild, channel)
+        vc = await discord_utils.ensure_connected(guild, channel)
         try:
             job_id = await audio_sfx_jobs.add_job(vc, sound, min_interval, max_interval)
             message = (
@@ -130,11 +131,12 @@ class SFXCommands(commands.Cog):
         if channel_member is None:
             return
         channel, _member = channel_member
+        guild = channel.guild
 
         # pick & fire off the effect
         sound = random.choice(audio_sfx_jobs.SOUND_FILES)  # noqa: S311
 
-        vc = await discord_utils.ensure_connected(interaction.guild, channel)
+        vc = await discord_utils.ensure_connected(guild, channel)
         mixer = await discord_utils.get_mixer_from_interaction(interaction)
 
         mixer.play_file(sound)
@@ -165,8 +167,9 @@ class SFXCommands(commands.Cog):
         if channel_member is None:
             return
         channel, _member = channel_member
+        guild = channel.guild
 
-        vc = await discord_utils.ensure_connected(interaction.guild, channel)
+        vc = await discord_utils.ensure_connected(guild, channel)
         mixer = await discord_utils.get_mixer_from_interaction(interaction)
 
         try:

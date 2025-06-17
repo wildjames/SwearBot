@@ -217,10 +217,8 @@ class MusicCommands(commands.Cog):
         if channel_member is None:
             return
         channel, _member = channel_member
-        vc = await discord_utils.ensure_connected(
-            interaction.guild,
-            channel,
-        )
+        guild = channel.guild
+        vc = await discord_utils.ensure_connected(guild, channel)
         upcoming = await yt_jobs.list_queue(vc)
 
         if not upcoming:
@@ -268,12 +266,10 @@ class MusicCommands(commands.Cog):
         if channel_member is None:
             return
         channel, _member = channel_member
-        vc = await discord_utils.ensure_connected(
-            interaction.guild,
-            channel,
-        )
+        guild = channel.guild
+        vc = await discord_utils.ensure_connected(guild, channel)
         await yt_jobs.skip(vc)
-        logger.info("Skipped track for guild_id=%s", interaction.guild.id)
+        logger.info("Skipped track for guild_id=%s", guild.id)
 
         track_url = yt_jobs.get_current_track(vc)
         if not track_url:
@@ -304,10 +300,8 @@ class MusicCommands(commands.Cog):
         if channel_member is None:
             return
         channel, _member = channel_member
-        vc = await discord_utils.ensure_connected(
-            interaction.guild,
-            channel,
-        )
+        guild = channel.guild
+        vc = await discord_utils.ensure_connected(guild, channel)
         await yt_jobs.stop(vc)
         await interaction.response.send_message(
             "⏹️    Stopped and cleared YouTube queue.", ephemeral=False
@@ -320,8 +314,9 @@ class MusicCommands(commands.Cog):
         if channel_member is None:
             return
         channel, _member = channel_member
-        vc = await discord_utils.ensure_connected(interaction.guild, channel)
-        logger.info("Clearing YouTube queue for guild_id=%s", interaction.guild.id)
+        guild = channel.guild
+        vc = await discord_utils.ensure_connected(guild, channel)
+        logger.info("Clearing YouTube queue for guild_id=%s", guild.id)
 
         # Clear the queue
         await yt_jobs.clear_queue(vc)
