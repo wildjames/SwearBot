@@ -3,31 +3,63 @@ Another Discord bot of biblical proportions.
 
 [![Coverage Status](https://coveralls.io/repos/github/wildjames/BalaamBot/badge.svg?branch=main)](https://coveralls.io/github/wildjames/BalaamBot?branch=main)
 
-# TODO: Write a README
+Balaam Bot mixes YouTube audio, sound effects and other fun features into a single Discord bot. It uses slash commands provided by `discord.py` and includes a small cat adoption mini‑game, jokes and meme generation.
 
-I got the soundbites from [here](https://drive.google.com/drive/folders/1dr2XcAQAuCPJqZQkCRKa4Aq8IDOH8ZIz)
+## Features
+- **Music playback** – queue YouTube URLs or search terms with `/play` and manage the queue with `/list_queue`, `/skip`, and `/clear_queue`.
+- **Sound effects** – schedule random effects, trigger them manually or list the available files with `/list_sfx`.
+- **Cat commands** – adopt a cat, pet it and keep track of the guild’s collection.
+- **Jokes and memes** – `/joke` tells a joke and `/meme` fetches a random meme image.
 
-## Setting up a bot
+## Requirements
+- Python 3.10+
+- `ffmpeg` installed and available in the `PATH`.
 
-Follow the instructions [here](https://discordpy.readthedocs.io/en/stable/discord.html). If it helps, this is the [Discord applications page](https://discord.com/developers/applications) which will house your bot settings in the future.
+## Quick start
+1. Clone the repository and install dependencies:
+   ```bash
+   uv sync && uv run pre-commit install --install-hooks
+   ```
+2. Copy `env.template` to `.env` and set `DISCORD_BOT_TOKEN` to your bot’s token.
+3. Unpack the bundled sound effects (optional):
+   ```bash
+   make unpack
+   ```
+4. Start the bot locally:
+   ```bash
+   make run
+   ```
 
-## Required bot permissions
+### Docker
+Alternatively build and run using Docker:
+```bash
+docker build -t balaambot:latest .
+docker run --rm -it --env-file .env -v $(pwd)/persistent:/app/persistent balaambot:latest
+```
 
-Set the bot to install only to Guilds - not to users. There are no features that would work for individuals I think.
+## Bot setup
+Follow the [discord.py guide](https://discordpy.readthedocs.io/en/stable/discord.html) when creating your application. When inviting the bot, grant it the following scopes and permissions:
 
 Scopes:
- - `applications.commands`
- - `bot`
+- `applications.commands`
+- `bot`
 
 Permissions:
- - `Connect`
- - `Send Messages`
- - `Speak`
- - `Use Voice Activity`
- - `View Channels`
+- `Connect`
+- `Send Messages`
+- `Speak`
+- `Use Voice Activity`
+- `View Channels`
 
-Privileged Intents:
- - `Message Content Intent`
+Privileged intents:
+- `Message Content Intent`
 
-# Future Work
-See [TODO.md](TODO.md) for a list of things to do.
+## Tests
+Run the unit tests with:
+```bash
+make test
+```
+Use `make test-integration` to run the slower integration tests.
+
+For planned work see [TODO.md](TODO.md).
+
