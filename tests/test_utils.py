@@ -1,6 +1,7 @@
 import json
 import pytest
 
+import balaambot.config as config
 import balaambot.utils as utils
 from balaambot.utils import sec_to_string, get_cache, set_cache, memory_cache
 
@@ -95,7 +96,7 @@ async def test_redis_set_and_get(monkeypatch):
 @pytest.mark.asyncio
 async def test_redis_hget_awaitable(monkeypatch):
     # simulate an awaitable hget()
-    monkeypatch.setattr(utils, "USE_REDIS", True)
+    monkeypatch.setattr(config, "USE_REDIS", True)
     fake = FakeRedisAsync()
     monkeypatch.setattr(utils, "redis_cache", fake)
 
@@ -110,7 +111,7 @@ async def test_redis_hget_awaitable(monkeypatch):
 @pytest.mark.asyncio
 async def test_redis_missing_key_raises_value_error(monkeypatch):
     # empty store
-    monkeypatch.setattr(utils, "USE_REDIS", True)
+    monkeypatch.setattr(config, "USE_REDIS", True)
     fake = FakeRedisSync()
     monkeypatch.setattr(utils, "redis_cache", fake)
 
