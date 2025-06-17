@@ -1,6 +1,7 @@
 import concurrent.futures
 import json
 from collections.abc import Awaitable
+from typing import Any
 
 import redis
 
@@ -21,8 +22,8 @@ if USE_REDIS:
     )
 
 
-async def get_cache(key: str) -> dict:
-    """Fetch a dict from the cache.
+async def get_cache(key: str) -> dict[str, Any]:
+    """Fetch a dict from the cache. Throw an error if the key is not found.
 
     Arguments:
         key: The key that the data is stored under
@@ -42,7 +43,7 @@ async def get_cache(key: str) -> dict:
     return memory_cache[key]
 
 
-async def set_cache(key: str, obj: dict) -> None:
+async def set_cache(key: str, obj: dict[str, Any]) -> None:
     """Store the given dictionary in the cache under the specified key.
 
     Arguments:

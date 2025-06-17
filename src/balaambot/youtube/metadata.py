@@ -1,5 +1,4 @@
 import asyncio
-import json
 import logging
 from typing import Any, cast
 
@@ -10,7 +9,6 @@ from balaambot.youtube.utils import (
     VideoMetadata,
     check_is_playlist,
     extract_metadata,
-    get_metadata_path,
     is_valid_youtube_url,
 )
 
@@ -23,14 +21,15 @@ async def get_youtube_track_metadata(url: str) -> VideoMetadata:
         msg = "Invalid YouTube URL: %s"
         raise ValueError(msg, url)
 
-    meta_path = get_metadata_path(url)
-    if meta_path.exists():
-        data = json.loads(meta_path.read_text(encoding="utf-8"))
-        data = cast("VideoMetadata", data)
-        logger.info("Loaded metadata from cache: '%s'", meta_path)
-        return data
+    try:
+        meta_dict = await utils.get_cache(url)
+        return VideoMetadata(**meta_dict)
 
-    logger.info("Fetching track metadata for URL: '%s'", url)
+    except KeyError:
+        logger.info(
+            "No metadata in cache for URL. Fetching track metadata for URL: '%s'", url
+        )
+
     ydl_opts = {
         "quiet": True,
         "skip_download": True,
@@ -57,24 +56,15 @@ async def get_youtube_track_metadata(url: str) -> VideoMetadata:
         runtime_str=utils.sec_to_string(duration_s),
     )
 
-    meta_path.parent.mkdir(parents=True, exist_ok=True)
-    meta_path.write_text(json.dumps(meta), encoding="utf-8")
-    logger.debug("Cached metadata to %s", meta_path)
+    await utils.set_cache(url, dict(meta))
+    logger.debug("Cached metadata for '%s'", url)
 
     return meta
 
 
 def fetch_cached_youtube_track_metadata(url: str) -> VideoMetadata:
     """Fetch cached track metadata from the disk. If it's not found, raise an error."""
-    meta_path = get_metadata_path(url)
-    if meta_path.exists():
-        data = json.loads(meta_path.read_text(encoding="utf-8"))
-        data = cast("VideoMetadata", data)
-        logger.info("Loaded metadata from cache: '%s'", meta_path)
-        return data
-
-    msg = f"No metadata cached for url '{url}'"
-    raise FileNotFoundError(msg)
+    raise NotImplementedError
 
 
 async def get_playlist_video_urls(playlist_url: str) -> list[str]:
