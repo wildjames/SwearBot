@@ -9,10 +9,7 @@ from balaambot.youtube.download import (
     fetch_audio_pcm,
     get_metadata,
 )
-from balaambot.youtube.metadata import (
-    fetch_cached_youtube_track_metadata,
-    get_youtube_track_metadata,
-)
+from balaambot.youtube.metadata import get_youtube_track_metadata
 from balaambot.youtube.utils import get_cache_path, get_temp_paths
 
 # TODO: This should maintain a "playing" state so we can pause and resume playback
@@ -39,6 +36,9 @@ async def add_to_queue(
         "Queued URL %s for guild_id=%s (queue length=%d)", url, vc.guild.id, len(queue)
     )
 
+    # dispatch a subprocess that fetches the metadata
+    vc.loop.run_in_executor(utils.FUTURES_EXECUTOR, get_metadata, logger, url)
+
     # If this is the only item, start playback
     if len(queue) == 1:
         logger.info("Queue created for guild_id=%s, starting playback", vc.guild.id)
@@ -51,9 +51,6 @@ async def add_to_queue(
             # If we fail to start playback, we should clear the queue
             youtube_queue.pop(vc.guild.id, None)
             raise
-
-    # dispatch a subprocess that fetches the metadata to a file
-    vc.loop.run_in_executor(utils.FUTURES_EXECUTOR, get_metadata, logger, url)
 
 
 async def _maybe_preload_next_tracks(
@@ -121,14 +118,25 @@ def create_before_after_functions(
             if channel is not None and not isinstance(
                 channel, (ForumChannel, CategoryChannel)
             ):
-                track = fetch_cached_youtube_track_metadata(url)
-                content = "Playing next track"
-                if track:
-                    content = f"▶️    Now playing **[{track['title']}]({track['url']})**"
+                # Schedule an async task to fetch metadata and send the message
+                async def _send_now_playing() -> None:
+                    try:
+                        track = await get_youtube_track_metadata(url)
+                        if track:
+                            content = (
+                                f"▶️    Now playing **[{track['title']}]"
+                                f"({track['url']})**"
+                            )
+                        else:
+                            content = "▶️    Now playing next track"
+                        logger.info("Sending playback message: '%s'", content)
+                        await channel.send(content=content)
+                    except Exception:
+                        logger.exception(
+                            "Failed to send 'now playing' message for %s", url
+                        )
 
-                logger.info("Sending message: '%s'", content)
-                job = channel.send(content=content)
-                vc.loop.create_task(job)
+                vc.loop.create_task(_send_now_playing())
 
     def _after_play() -> None:
         # Remove the URL from the queue after playback

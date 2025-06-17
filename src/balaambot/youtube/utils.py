@@ -1,5 +1,4 @@
 import atexit
-import json
 import logging
 import re
 import shutil
@@ -8,7 +7,7 @@ from pathlib import Path
 from typing import Any, TypedDict, cast
 
 import balaambot.config
-from balaambot.utils import sec_to_string
+from balaambot.utils import sec_to_string, set_cache
 
 logger = logging.getLogger(__name__)
 
@@ -112,7 +111,7 @@ _VALID_YT_PLAYLIST_URL = re.compile(
 )
 
 
-def extract_metadata(data: dict[str, Any]) -> VideoMetadata:
+async def extract_metadata(data: dict[str, Any]) -> VideoMetadata:
     """Takes the dict from youtube, makes a metadata object, and stores it on disk."""
     url = cast("str", data.get("url"))
     title = cast("str", data.get("title")) or url
@@ -125,11 +124,8 @@ def extract_metadata(data: dict[str, Any]) -> VideoMetadata:
         runtime_str=sec_to_string(duration_s),
     )
 
-    # dump JSON
-    meta_path = get_metadata_path(url)
-    meta_path.parent.mkdir(parents=True, exist_ok=True)
-    meta_path.write_text(json.dumps(meta), encoding="utf-8")
-    logger.debug("Cached metadata to %s", meta_path)
+    logger.info("Caching data to RAM for URL '%s'", url)
+    await set_cache(url, dict(meta))
 
     return meta
 

@@ -62,11 +62,6 @@ async def get_youtube_track_metadata(url: str) -> VideoMetadata:
     return meta
 
 
-def fetch_cached_youtube_track_metadata(url: str) -> VideoMetadata:
-    """Fetch cached track metadata from the disk. If it's not found, raise an error."""
-    raise NotImplementedError
-
-
 async def get_playlist_video_urls(playlist_url: str) -> list[str]:
     """Return a list of all video URLs in the given playlist."""
     if not check_is_playlist(playlist_url):
@@ -101,13 +96,17 @@ async def get_playlist_video_urls(playlist_url: str) -> list[str]:
     entries = cast("list[dict[str, Any]]", info.get("entries")) or []  # type: ignore[no-typing]
 
     video_urls: list[str] = []
+    metadata_promises = []
     for entry in entries:
         vid_id = entry.get("id")
         if not vid_id:
             continue
 
         video_urls.append(f"https://www.youtube.com/watch?v={vid_id}")
-        extract_metadata(entry)
+        metadata_promises.append(extract_metadata(entry))
+
+    # waiting for metadata to be cached
+    await asyncio.gather(*metadata_promises)
 
     return video_urls
 
