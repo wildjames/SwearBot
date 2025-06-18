@@ -51,7 +51,7 @@ async def get_cache(key: str) -> dict[str, Any]:
         key: The key that the data is stored under
 
     """
-    if redis_cache is not None:
+    if redis_cache is not None and USE_REDIS:
         logger.debug("Fetching '%s' from Redis", key)
         serialised = redis_cache.hget(REDIS_KEY, key)
 
@@ -75,7 +75,7 @@ async def set_cache(key: str, obj: dict[str, Any]) -> None:
         obj: The dictionary object to cache.
 
     """
-    if redis_cache is not None:
+    if redis_cache is not None and USE_REDIS:
         logger.debug("Caching '%s' to Redis", key)
         serialised = json.dumps(obj)
         redis_cache.hset(REDIS_KEY, key, serialised)

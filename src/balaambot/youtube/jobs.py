@@ -130,6 +130,8 @@ def create_before_after_functions(
                         logger.exception(
                             "Failed to send 'now playing' message for %s", url
                         )
+                        content = "Now playing next track"
+                        await channel.send(content=content)
 
                 vc.loop.create_task(_send_now_playing())
 

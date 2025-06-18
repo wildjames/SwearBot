@@ -34,6 +34,7 @@ def force_memory_cache(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_set_and_get_cache_memory():
+    config.USE_REDIS = False
     data = {"foo": "bar", "num": 123}
 
     await set_cache("mykey", data)
