@@ -1,5 +1,4 @@
 import asyncio
-import json
 import logging
 import subprocess
 from pathlib import Path
@@ -14,8 +13,9 @@ from balaambot.youtube.utils import (
     DEFAULT_CHANNELS,
     DEFAULT_SAMPLE_RATE,
     VideoMetadata,
+    cache_get_metadata,
+    cache_set_metadata,
     get_cache_path,
-    get_metadata_path,
     get_temp_paths,
 )
 
@@ -212,6 +212,15 @@ def download_and_convert(  # noqa: PLR0913
 
 def get_metadata(logger: logging.Logger, url: str) -> VideoMetadata:
     """Blocking helper to fetch metadata for ``url`` and cache the JSON."""
+    try:
+        # Synchronously fetch from cache (utils.get_cache is async)
+        meta_dict = asyncio.run(cache_get_metadata(url))
+        return VideoMetadata(**meta_dict)
+    except KeyError:
+        logger.info(
+            "No metadata in cache for URL. Fetching track metadata for URL: '%s'", url
+        )
+
     ydl_opts = {
         "quiet": True,
         "skip_download": True,
@@ -229,16 +238,13 @@ def get_metadata(logger: logging.Logger, url: str) -> VideoMetadata:
     title = cast("str", info.get("title")) or url  # type: ignore[no-typing]
     duration_s = cast("int", info.get("duration")) or 0  # type: ignore[no-typing]
 
-    meta: VideoMetadata = VideoMetadata(
+    meta = VideoMetadata(
         url=url,
         title=title,
         runtime=duration_s,
         runtime_str=sec_to_string(duration_s),
     )
 
-    meta_path = get_metadata_path(url)
-    meta_path.parent.mkdir(parents=True, exist_ok=True)
-    meta_path.write_text(json.dumps(meta), encoding="utf-8")
-    logger.debug("Cached metadata to %s", meta_path)
+    asyncio.run(cache_set_metadata(meta))
 
     return meta

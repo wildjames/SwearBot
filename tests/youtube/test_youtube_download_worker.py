@@ -1,4 +1,3 @@
-import json
 import logging
 import subprocess
 from pathlib import Path
@@ -167,12 +166,21 @@ def test_download_and_convert_ffmpeg_fail(monkeypatch, tmp_path):
     assert not pcm_tmp.exists()
 
 
-def test_get_metadata_success(monkeypatch, tmp_path):
-    # Patch YoutubeDL and dependencies
+def test_get_metadata_success(monkeypatch):
+    """Verify metadata fetching stores the result in the cache."""
     monkeypatch.setattr(download_module, "YoutubeDL", DummyYDLExtractInfo)
     monkeypatch.setattr(download_module, "sec_to_string", lambda s: f"{s}s")
-    meta_path = tmp_path / "meta.json"
-    monkeypatch.setattr(download_module, "get_metadata_path", lambda url: meta_path)
+
+    stored: dict[str, dict] = {}
+
+    async def fake_cache_get(url):
+        raise KeyError(url)
+
+    async def fake_cache_set(meta):
+        stored[meta["url"]] = dict(meta)
+
+    monkeypatch.setattr(download_module, "cache_get_metadata", fake_cache_get)
+    monkeypatch.setattr(download_module, "cache_set_metadata", fake_cache_set)
 
     meta = get_metadata(get_dummy_logger(), "http://example.com/video")
 
@@ -181,18 +189,17 @@ def test_get_metadata_success(monkeypatch, tmp_path):
     assert meta["title"] == "Test Title"
     assert meta["runtime"] == 42
     assert meta["runtime_str"] == "42s"
-
-    data = json.loads(meta_path.read_text(encoding="utf-8"))
-    assert data == {
-        "url": meta["url"],
-        "title": meta["title"],
-        "runtime": meta["runtime"],
-        "runtime_str": meta["runtime_str"],
-    }
+    assert stored["http://example.com/video"] == meta
 
 
 def test_get_metadata_failure(monkeypatch):
     monkeypatch.setattr(download_module, "YoutubeDL", DummyYDLNoInfo)
+
+    async def fake_cache_get(url):
+        raise KeyError(url)
+
+    monkeypatch.setattr(download_module, "cache_get_metadata", fake_cache_get)
+    monkeypatch.setattr(download_module, "cache_set_metadata", lambda meta: None)
 
     with pytest.raises(ValueError) as exc:
         get_metadata(get_dummy_logger(), "http://example.com/video")

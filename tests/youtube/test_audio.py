@@ -1,5 +1,4 @@
 import asyncio
-import json
 from pathlib import Path
 
 import pytest
@@ -9,6 +8,7 @@ from balaambot import utils
 
 # Adjust import path if module name differs
 from balaambot.youtube import download, metadata
+import balaambot.youtube.utils as yt_utils
 
 pytestmark = pytest.mark.asyncio
 
@@ -43,7 +43,9 @@ async def test_download_error(monkeypatch):
 
     monkeypatch.setattr(metadata, "YoutubeDL", lambda opts: DummyYDL())
     with pytest.raises(DownloadError):
-        await metadata.get_youtube_track_metadata("u")
+        await metadata.get_youtube_track_metadata(
+            "https://youtu.be/ABCDEFGHIJK"
+        )
 
 
 async def test_unexpected_exception(monkeypatch):
@@ -61,12 +63,15 @@ async def test_unexpected_exception(monkeypatch):
 
     monkeypatch.setattr(metadata, "YoutubeDL", lambda opts: DummyYDL())
     with pytest.raises(ValueError):
-        await metadata.get_youtube_track_metadata("u")
+        await metadata.get_youtube_track_metadata(
+            "https://www.youtube.com/watch?v=XYZ12345678"
+        )
 
 
-async def test_successful_metadata(monkeypatch, tmp_path):
-    # Test that metadata is fetched and cached
+async def test_successful_metadata(monkeypatch):
+    """Metadata is fetched and cached when not already in the cache."""
     monkeypatch.setattr(metadata, "is_valid_youtube_url", lambda url: True)
+
     info = {"title": "My Video", "duration": 123}
 
     class DummyYDL:
@@ -82,42 +87,54 @@ async def test_successful_metadata(monkeypatch, tmp_path):
     monkeypatch.setattr(metadata, "YoutubeDL", lambda opts: DummyYDL())
     monkeypatch.setattr(utils, "sec_to_string", lambda s: "2:03")
 
-    # Override metadata path to tmp
-    meta_path = tmp_path / "meta.json"
-    monkeypatch.setattr(metadata, "get_metadata_path", lambda u: meta_path)
+    cached: dict[str, dict] = {}
+
+    async def fake_cache_get(url):
+        raise KeyError(url)
+
+    async def fake_cache_set(meta):
+        cached[meta["url"]] = dict(meta)
+
+    monkeypatch.setattr(metadata, "cache_get_metadata", fake_cache_get)
+    monkeypatch.setattr(metadata, "cache_set_metadata", fake_cache_set)
+
     result = await metadata.get_youtube_track_metadata("url1")
+
     assert result == {
         "url": "url1",
         "title": "My Video",
         "runtime": 123,
         "runtime_str": "2:03",
     }
-    # Ensure cache file is created
-    assert meta_path.exists()
+    assert cached["url1"] == result
 
 
-async def test_metadata_cache_hit(monkeypatch, tmp_path):
-    # Test returning metadata from existing cache
+async def test_metadata_cache_hit(monkeypatch):
+    """Cached metadata is returned without calling YoutubeDL."""
     data = {"url": "u", "title": "t", "runtime": 1, "runtime_str": "0:01"}
-    cache_file = tmp_path / "meta.json"
-    cache_file.write_text(json.dumps(data), encoding="utf-8")
+
+    async def fake_cache_get(url):
+        return data
+
+    async def fake_cache_set(meta):
+        raise AssertionError("cache_set_metadata should not be called")
+
     monkeypatch.setattr(metadata, "is_valid_youtube_url", lambda url: True)
-    monkeypatch.setattr(metadata, "get_metadata_path", lambda u: cache_file)
-    # Should return without invoking YoutubeDL
+    monkeypatch.setattr(metadata, "cache_get_metadata", fake_cache_get)
+    monkeypatch.setattr(metadata, "cache_set_metadata", fake_cache_set)
     monkeypatch.setattr(
         metadata,
         "YoutubeDL",
         lambda opts: (_ for _ in ()).throw(RuntimeError("Shouldn't be called")),
     )
+
     result = await metadata.get_youtube_track_metadata("u")
     assert result == data
 
 
-async def test_metadata_defaults(monkeypatch, tmp_path):
-    # Test default title and duration
+async def test_metadata_defaults(monkeypatch):
+    """Metadata defaults are applied when youtube info is missing."""
     monkeypatch.setattr(metadata, "is_valid_youtube_url", lambda url: True)
-    meta_path = tmp_path / "meta.json"
-    monkeypatch.setattr(metadata, "get_metadata_path", lambda u: meta_path)
 
     class DummyYDL:
         def __enter__(self):
@@ -131,28 +148,49 @@ async def test_metadata_defaults(monkeypatch, tmp_path):
 
     monkeypatch.setattr(metadata, "YoutubeDL", lambda opts: DummyYDL())
     monkeypatch.setattr(utils, "sec_to_string", lambda s: "0:00")
+
+    async def fake_cache_get(url):
+        raise KeyError(url)
+
+    stored: dict[str, dict] = {}
+
+    async def fake_cache_set(meta):
+        stored[meta["url"]] = dict(meta)
+
+    monkeypatch.setattr(metadata, "cache_get_metadata", fake_cache_get)
+    monkeypatch.setattr(metadata, "cache_set_metadata", fake_cache_set)
+
     result = await metadata.get_youtube_track_metadata("u")
     assert result["title"] == "u"
     assert result["runtime"] == 0
     assert result["runtime_str"] == "0:00"
+    assert stored["u"] == result
 
 
-# Tests for fetch_cached_youtube_track_metadata
-def test_fetch_cached_metadata_success(monkeypatch, tmp_path):
+# Tests for cache_get_metadata
+async def test_cache_get_metadata_success(monkeypatch):
     data = {"url": "u", "title": "t", "runtime": 1, "runtime_str": "0:01"}
-    meta_file = tmp_path / "meta.json"
-    meta_file.write_text(json.dumps(data), encoding="utf-8")
-    monkeypatch.setattr(metadata, "get_metadata_path", lambda u: meta_file)
-    result = metadata.fetch_cached_youtube_track_metadata("u")
+
+    async def fake_get_cache(key):
+        assert key == "vid"
+        return data
+
+    monkeypatch.setattr(yt_utils, "get_video_id", lambda url: "vid")
+    monkeypatch.setattr(yt_utils, "get_cache", fake_get_cache)
+
+    result = await yt_utils.cache_get_metadata(url="u")
     assert result == data
 
 
-def test_fetch_cached_metadata_missing(monkeypatch):
-    from pathlib import Path
+async def test_cache_get_metadata_missing(monkeypatch):
+    async def fake_get_cache(key):
+        raise KeyError(key)
 
-    monkeypatch.setattr(metadata, "get_metadata_path", lambda u: Path("/nonexistent"))
-    with pytest.raises(FileNotFoundError):
-        metadata.fetch_cached_youtube_track_metadata("u")
+    monkeypatch.setattr(yt_utils, "get_video_id", lambda url: "vid")
+    monkeypatch.setattr(yt_utils, "get_cache", fake_get_cache)
+
+    with pytest.raises(KeyError):
+        await yt_utils.cache_get_metadata(url="u")
 
 
 # Tests for fetch_audio_pcm
@@ -169,7 +207,11 @@ async def test_fetch_audio_auth(monkeypatch):
         download, "get_cache_path", lambda u, sr, ch: Path("/tmp/nonexistent")
     )
     with pytest.raises(NotImplementedError):
-        await download.fetch_audio_pcm("u", username="user", password="pass")
+        await download.fetch_audio_pcm(
+            "https://www.youtube.com/watch?v=ACDEF123456",
+            username="user",
+            password="pass",
+        )
 
 
 async def test_fetch_audio_download_error(monkeypatch, tmp_path):
@@ -189,8 +231,10 @@ async def test_fetch_audio_download_error(monkeypatch, tmp_path):
 
     monkeypatch.setattr(metadata, "get_youtube_track_metadata", dummy_meta)
     with pytest.raises(RuntimeError) as ei:
-        await download.fetch_audio_pcm("u")
-    assert "Failed to download audio for u" in str(ei.value)
+        await download.fetch_audio_pcm(
+            "https://youtu.be/ZZZZYYYYXXX"
+        )
+    assert "Failed to download audio for https://youtu.be/ZZZZYYYYXXX" in str(ei.value)
 
 
 async def test_fetch_audio_success(monkeypatch, tmp_path):
@@ -220,7 +264,7 @@ async def test_fetch_audio_success(monkeypatch, tmp_path):
 
 
 # Tests for _sync_download
-def test_sync_download_success(monkeypatch):
+async def test_sync_download_success(monkeypatch):
     called = {}
 
     class DummyYDL:
@@ -238,7 +282,7 @@ def test_sync_download_success(monkeypatch):
     assert called["urls"] == [url]
 
 
-def test_sync_download_propagates_error(monkeypatch):
+async def test_sync_download_propagates_error(monkeypatch):
     class DummyYDL:
         def __init__(self, opts):
             pass
@@ -411,9 +455,10 @@ async def test_playlist_valid(monkeypatch):
     monkeypatch.setattr(asyncio, "to_thread", fake_to_thread)
     # Capture calls to extract_metadata
     called = []
-    monkeypatch.setattr(
-        metadata, "extract_metadata", lambda entry: called.append(entry)
-    )
+    async def fake_extract(entry):
+        called.append(entry)
+
+    monkeypatch.setattr(metadata, "extract_metadata", fake_extract)
     result = await metadata.get_playlist_video_urls(playlist_url)
     assert result == [
         "https://www.youtube.com/watch?v=id1",
