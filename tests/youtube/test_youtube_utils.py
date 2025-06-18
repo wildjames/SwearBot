@@ -38,7 +38,6 @@ def test_directories_created(tmp_cache_root):
         ("https://www.youtube.com/watch?v=dQw4w9WgXcQ", "dQw4w9WgXcQ"),
         ("http://youtu.be/ABCDEFGHIJK", "ABCDEFGHIJK"),
         ("https://music.youtube.com/watch?v=12345678901&list=PL", "12345678901"),
-        ("invalid_url", None),
     ],
 )
 def test_get_video_id(tmp_cache_root, url, expected_id):
@@ -46,11 +45,16 @@ def test_get_video_id(tmp_cache_root, url, expected_id):
     assert mod.get_video_id(url) == expected_id
 
 
+def test_get_video_id_invalid(tmp_cache_root):
+    mod = import_utils(tmp_cache_root)
+    with pytest.raises(ValueError):
+        mod.get_video_id("invalid_url")
+
+
 @pytest.mark.parametrize(
     "url,rate,channels,expected_suffix",
     [
         ("https://youtu.be/ABCDEFGHIJK", 48000, 2, "ABCDEFGHIJK_48000Hz_2ch.pcm"),
-        ("foo/bar", 44100, 1, "foo_bar_44100Hz_1ch.pcm"),
     ],
 )
 def test_get_cache_path(tmp_cache_root, url, rate, channels, expected_suffix):
@@ -59,6 +63,12 @@ def test_get_cache_path(tmp_cache_root, url, rate, channels, expected_suffix):
     expected_parent = (tmp_cache_root / "audio_cache/cached").resolve()
     assert path.parent == expected_parent
     assert path.name == expected_suffix
+
+
+def test_get_cache_path_invalid(tmp_cache_root):
+    mod = import_utils(tmp_cache_root)
+    with pytest.raises(ValueError):
+        mod.get_cache_path("foo/bar", 44100, 1)
 
 
 @pytest.mark.parametrize(

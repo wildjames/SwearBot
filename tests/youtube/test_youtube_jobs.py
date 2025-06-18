@@ -348,8 +348,11 @@ async def test_create_before_after_functions_with_metadata(monkeypatch, dummy_lo
     vc = DummyVC(80)
     url1, url2 = "yt://1", "yt://2"
     ytj.youtube_queue[80] = [url1, url2]
-    # stub out fetch metadata
-    monkeypatch.setattr(ytj, "fetch_cached_youtube_track_metadata", lambda u: {"title": "T1", "url": "u1"})
+    # stub out metadata retrieval
+    async def fake_get_meta(u):
+        return {"title": "T1", "url": "u1"}
+
+    monkeypatch.setattr(ytj, "get_youtube_track_metadata", fake_get_meta)
     # fake text channel
     class TextChannel:
         def __init__(self): self.sent = []
@@ -359,11 +362,19 @@ async def test_create_before_after_functions_with_metadata(monkeypatch, dummy_lo
     channel = TextChannel()
     vc.guild.get_channel = lambda id: channel
 
-    calls = []
-    vc.loop.create_task = lambda coro: calls.append(coro) or asyncio.sleep(0)
+    calls: list[asyncio.Task] = []
+    orig_create = vc.loop.create_task
+
+    def run_task(coro, *args, **kwargs):
+        task = orig_create(coro, *args, **kwargs)
+        calls.append(task)
+        return task
+
+    vc.loop.create_task = run_task
 
     before, after = ytj.create_before_after_functions(url1, vc, text_channel=100)
     before()
+    await asyncio.gather(*calls)
     # metadata‐based message sent
     assert channel.sent and "Now playing" in channel.sent[0]
 
@@ -381,7 +392,10 @@ async def test_create_before_after_functions_without_metadata(monkeypatch, dummy
     url = "yt://noinfo"
     ytj.youtube_queue[82] = [url]
     # fetch returns None
-    monkeypatch.setattr(ytj, "fetch_cached_youtube_track_metadata", lambda u: None)
+    async def fake_get_meta(u):
+        return None
+
+    monkeypatch.setattr(ytj, "get_youtube_track_metadata", fake_get_meta)
     class TextChannel:
         def __init__(self): self.sent = []
         def send(self, content):
@@ -391,8 +405,9 @@ async def test_create_before_after_functions_without_metadata(monkeypatch, dummy
     vc.guild.get_channel = lambda id: channel
     before, _ = ytj.create_before_after_functions(url, vc, text_channel=123)
     before()
+    await asyncio.sleep(0)
     # fallback message sent
-    assert channel.sent and "Playing next track" in channel.sent[0]
+    assert channel.sent and "Now playing next track" in channel.sent[0]
 
 
 @pytest.mark.asyncio
@@ -407,10 +422,18 @@ async def test_after_play_finishes_queue(monkeypatch, dummy_logger):
             return asyncio.sleep(0)
     channel = TextChannel()
     vc.guild.get_channel = lambda id: channel
-    calls = []
-    vc.loop.create_task = lambda coro: calls.append(coro) or asyncio.sleep(0)
+    calls: list[asyncio.Task] = []
+    orig_create = vc.loop.create_task
+
+    def run_task(coro, *args, **kwargs):
+        task = orig_create(coro, *args, **kwargs)
+        calls.append(task)
+        return task
+
+    vc.loop.create_task = run_task
     _, after = ytj.create_before_after_functions(url, vc, text_channel=200)
     after()
+    await asyncio.sleep(0)
     assert 81 not in ytj.youtube_queue
     assert channel.sent and "Finished playing queue!" in channel.sent[0]
 
