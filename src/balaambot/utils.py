@@ -1,11 +1,15 @@
 import concurrent.futures
 import json
+import logging
 from collections.abc import Awaitable
 from typing import Any
 
 import redis
+import redis.exceptions
 
 from balaambot.config import ADDRESS, DB, PASSWORD, PORT, REDIS_KEY, USE_REDIS, USERNAME
+
+logger = logging.getLogger(__name__)
 
 FUTURES_EXECUTOR = concurrent.futures.ProcessPoolExecutor()
 
@@ -13,13 +17,31 @@ memory_cache: dict[str, dict] = {}
 
 redis_cache = None
 if USE_REDIS:
-    redis_cache = redis.Redis(
-        host=ADDRESS,
-        port=PORT,
-        db=DB,
-        username=USERNAME,
-        password=PASSWORD,
-    )
+    # Check that we can talk to redis
+    try:
+        logger.info(
+            "Trying to use Redis cache with key '%s' - host '%s:%s'",
+            REDIS_KEY,
+            ADDRESS,
+            PORT,
+        )
+        redis_cache = redis.Redis(
+            host=ADDRESS,
+            port=PORT,
+            db=DB,
+            username=USERNAME,
+            password=PASSWORD,
+            health_check_interval=20,
+        )
+        reply = str(redis_cache.echo("OK"))
+        logger.info("Tried to talk to redis server - got reply '%s'", reply)
+
+    except (redis.exceptions.AuthenticationError, redis.exceptions.ConnectionError):
+        logger.exception("FAILED TO CONNECT TO REDIS - FALLING BACK ON IN-MEMORY CACHE")
+        redis_cache = None
+        USE_REDIS = False
+else:
+    logger.info("Using in-memory cache")
 
 
 async def get_cache(key: str) -> dict[str, Any]:
@@ -30,6 +52,7 @@ async def get_cache(key: str) -> dict[str, Any]:
 
     """
     if redis_cache is not None:
+        logger.debug("Fetching '%s' from Redis", key)
         serialised = redis_cache.hget(REDIS_KEY, key)
 
         if isinstance(serialised, Awaitable):
@@ -40,6 +63,7 @@ async def get_cache(key: str) -> dict[str, Any]:
 
         return json.loads(serialised)
 
+    logger.debug("Fetching '%s' from memory", key)
     return memory_cache[key]
 
 
@@ -52,10 +76,12 @@ async def set_cache(key: str, obj: dict[str, Any]) -> None:
 
     """
     if redis_cache is not None:
+        logger.debug("Caching '%s' to Redis", key)
         serialised = json.dumps(obj)
         redis_cache.hset(REDIS_KEY, key, serialised)
         return
 
+    logger.debug("Caching '%s' to memory", key)
     memory_cache[key] = obj
 
 

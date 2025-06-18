@@ -124,7 +124,6 @@ async def extract_metadata(data: dict[str, Any]) -> VideoMetadata:
         runtime_str=sec_to_string(duration_s),
     )
 
-    logger.info("Caching data to RAM for URL '%s'", url)
     await cache_set_metadata(meta)
 
     return meta
@@ -133,6 +132,7 @@ async def extract_metadata(data: dict[str, Any]) -> VideoMetadata:
 async def cache_set_metadata(meta: VideoMetadata) -> None:
     """Cache metadata for given video by using the video ID and updating the cache."""
     video_id = get_video_id(meta["url"])
+    logger.info("Caching metadata for video ID '%s'", video_id)
     await set_cache(video_id, dict(meta))
 
 
