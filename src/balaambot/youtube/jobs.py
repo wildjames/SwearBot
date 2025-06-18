@@ -122,14 +122,9 @@ def create_before_after_functions(
                 async def _send_now_playing() -> None:
                     try:
                         track = await get_youtube_track_metadata(url)
-                        if track:
-                            content = (
-                                f"▶️    Now playing **[{track['title']}]"
-                                f"({track['url']})**"
-                            )
-                        else:
-                            content = "▶️    Now playing next track"
-                        logger.info("Sending playback message: '%s'", content)
+                        content = (
+                            f"▶️    Now playing **[{track['title']}]({track['url']})**"
+                        )
                         await channel.send(content=content)
                     except Exception:
                         logger.exception(
@@ -156,12 +151,7 @@ def create_before_after_functions(
 
         # Schedule the next track when this one finishes
         logger.info("Finished playing %s for guild_id=%s", url, vc.guild.id)
-        try:
-            vc.loop.create_task(_play_next(vc, text_channel=text_channel))
-        except Exception:
-            logger.exception(
-                "Failed to schedule next track for guild_id=%s", vc.guild.id
-            )
+        vc.loop.create_task(_play_next(vc, text_channel=text_channel))
 
     return _before_play, _after_play
 
