@@ -112,10 +112,6 @@ class MultiAudioSource(AudioSource):
         """
         return False
 
-    def cleanup(self) -> None:
-        """Perform cleanup by clearing all queued tracks and pausing playback."""
-        self.clear_queue()
-
     @property
     def is_stopped(self) -> bool:
         """Query whether the mixer is currently paused or stopped.
