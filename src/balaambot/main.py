@@ -58,6 +58,8 @@ def add_listeners() -> None:
     """Add listeners to the bot."""
     bot.add_listener(on_voice_state_update, "on_voice_state_update")
 
+    logger.info("Added listeners to the bot.")
+
 
 async def main() -> None:
     """Main async process that runs the bot."""
@@ -75,6 +77,7 @@ async def main() -> None:
     async with bot:
         # Loads all files in bot_commands
         await load_extensions()
+        add_listeners()
         # Start the bot
         await bot.start(DISCORD_BOT_TOKEN)
 

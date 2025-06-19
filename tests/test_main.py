@@ -125,12 +125,20 @@ def test_main_success(monkeypatch):
         async def start(self, token):
             assert token == "goodtoken"
 
+        def add_listener(self, func, event):
+            pass
+
     monkeypatch.setattr(main, "bot", DummyBot())
 
     async def fake_load_extensions():
         pass
 
+    def fake_add_listeners():
+        pass
+
     monkeypatch.setattr(main, "load_extensions", fake_load_extensions)
+    monkeypatch.setattr(main, "add_listeners", fake_add_listeners)
     # Should not raise
     asyncio.run(main.main())
+
 

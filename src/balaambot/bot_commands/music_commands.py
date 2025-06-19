@@ -291,6 +291,84 @@ class MusicCommands(commands.Cog):
         )
 
     @app_commands.command(
+        name="pause",
+        description="Pause the current YouTube track",
+    )
+    async def pause(self, interaction: discord.Interaction) -> None:
+        """Pause the current YouTube track."""
+        channel_member = await discord_utils.require_voice_channel(interaction)
+        if channel_member is None:
+            return
+        channel, _member = channel_member
+        guild = channel.guild
+        vc = await discord_utils.ensure_connected(guild, channel)
+        mixer = discord_utils.get_mixer_from_voice_client(vc)
+        if mixer is None:
+            await interaction.response.send_message(
+                "Failed to pause playback. Not connected to a voice channel.",
+                ephemeral=True,
+            )
+            return
+        if not mixer.is_playing:
+            await interaction.response.send_message(
+                "No track is currently playing.", ephemeral=True
+            )
+            return
+
+        # Pause the mixer
+        logger.info("Pausing track for guild_id=%s", guild.id)
+        mixer.pause()
+        await interaction.response.send_message(
+            "⏸️    Paused the current YouTube track.", ephemeral=False
+        )
+
+    @app_commands.command(
+        name="resume",
+        description="Resume playback of the current YouTube track",
+    )
+    async def resume(self, interaction: discord.Interaction) -> None:
+        """Resume playback of the current YouTube track."""
+        channel_member = await discord_utils.require_voice_channel(interaction)
+        if channel_member is None:
+            return
+
+        channel, _member = channel_member
+        guild = channel.guild
+
+        vc = await discord_utils.ensure_connected(guild, channel)
+        mixer = discord_utils.get_mixer_from_voice_client(vc)
+
+        if mixer is None:
+            await interaction.response.send_message(
+                "Failed to resume playback. Not connected to a voice channel.",
+                ephemeral=True,
+            )
+            return
+        if mixer.is_playing:
+            await interaction.response.send_message(
+                "Track is already playing.", ephemeral=True
+            )
+            return
+        if mixer.num_tracks == 0:
+            await interaction.response.send_message(
+                "No track is currently queued to resume.", ephemeral=True
+            )
+            return
+
+        # Resume the mixer
+        logger.info(
+            "Resuming track for guild_id=%s. %d Track(s) in mixer",
+            guild.id,
+            mixer.num_tracks,
+        )
+        mixer.resume()
+        if not vc.is_playing():
+            vc.play(mixer)
+        await interaction.response.send_message(
+            "▶️    Resumed the current YouTube track.", ephemeral=False
+        )
+
+    @app_commands.command(
         name="stop_music",
         description="Stop playback and clear YouTube queue",
     )
