@@ -4,7 +4,10 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from balaambot.discord_utils import ensure_connected, require_voice_channel
+from balaambot.discord_utils import (
+    ensure_connected,
+    require_voice_channel,
+)
 from balaambot.sfx.audio_sfx_jobs import stop_all_jobs as sfx_stop
 from balaambot.youtube.jobs import stop as yt_stop
 

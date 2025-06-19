@@ -1,9 +1,12 @@
+import logging
 from typing import cast
 
 import discord
 
 from balaambot.audio_handlers.multi_audio_source import MultiAudioSource, ensure_mixer
 from balaambot.config import DISCORD_VOICE_CLIENT
+
+logger = logging.getLogger(__name__)
 
 MAX__MESSAGE_LENGTH = 2000
 
@@ -71,6 +74,19 @@ async def ensure_connected(
         vc = await channel.connect(cls=DISCORD_VOICE_CLIENT)
 
     return vc
+
+
+async def check_voice_channel_populated(
+    guild: discord.Guild,
+    channel: discord.VoiceChannel,
+) -> bool:
+    """Check if the voice channel has any connected users."""
+    if not channel.members:
+        await guild.text_channels[0].send(
+            "The voice channel is empty. Please add some users to it."
+        )
+        return False
+    return True
 
 
 async def get_mixer_from_interaction(
@@ -151,3 +167,30 @@ async def get_voice_channel_mixer(
 
     mixer = get_mixer_from_voice_client(vc)
     return vc, mixer
+
+
+async def on_voice_state_update(
+    member: discord.Member,
+    before: discord.VoiceState,
+    after: discord.VoiceState,
+) -> None:
+    """Alert when a voice state is updated."""
+    # Detect when a user leaves a voice channel
+    if after.channel is None and before.channel is not None:
+        logger.info("'%s' left a voice channel '%s'.", member.name, before.channel)
+
+        # Check if there are any human members left in the channel
+        non_bot_members = (
+            [True for m in before.channel.members if not m.bot]
+            if before.channel
+            else []
+        )
+
+        # If no non-bot members are left, disconnect the bot
+        if not any(non_bot_members):
+            vc = before.channel.guild.voice_client
+            if vc:
+                await vc.disconnect(force=True)
+                logger.info(
+                    "Disconnected from %s as no users are left.", before.channel.name
+                )

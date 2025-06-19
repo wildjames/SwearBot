@@ -1,5 +1,6 @@
 # type: ignore
 import pytest
+from types import SimpleNamespace
 
 from balaambot import discord_utils
 from balaambot.discord_utils import (
@@ -9,6 +10,7 @@ from balaambot.discord_utils import (
     get_voice_channel_mixer,
     require_guild,
     require_voice_channel,
+    on_voice_state_update,
 )
 
 # --- Dummy classes to simulate discord.py objects ---
@@ -375,3 +377,55 @@ async def test_require_voice_channel_success(monkeypatch):
 
     result = await require_voice_channel(interaction)
     assert result == (channel, member)
+
+# ---------------------------------------------------------------------------
+# Tests for on_voice_state_update
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_on_voice_state_update_disconnects_with_only_bots(monkeypatch):
+    # Setup: channel has only bot members, so should trigger disconnect
+    bot_member = SimpleNamespace(bot=True)
+    vc = DummyVoiceClient()
+    guild = SimpleNamespace(voice_client=vc)
+    channel = SimpleNamespace(members=[bot_member], guild=guild, name="voice-channel")
+    before = SimpleNamespace(channel=channel)
+    after = SimpleNamespace(channel=None)
+    # Monkey-patch disconnect to accept force argument
+    async def fake_disconnect(self, force=True):
+        self._disconnected = True
+    monkeypatch.setattr(DummyVoiceClient, "disconnect", fake_disconnect)
+
+    # Call
+    await on_voice_state_update(
+        member=SimpleNamespace(name="leaver"),
+        before=before,
+        after=after,
+    )
+
+    # Assert we disconnected
+    assert vc._disconnected is True
+
+@pytest.mark.asyncio
+async def test_on_voice_state_update_no_disconnect_with_humans(monkeypatch):
+    # Setup: channel has a human member, so should NOT disconnect
+    human_member = SimpleNamespace(bot=False)
+    vc = DummyVoiceClient()
+    guild = SimpleNamespace(voice_client=vc)
+    channel = SimpleNamespace(members=[human_member], guild=guild, name="voice-channel")
+    before = SimpleNamespace(channel=channel)
+    after = SimpleNamespace(channel=None)
+    # Monkey-patch disconnect to accept force argument
+    async def fake_disconnect(self, force=True):
+        self._disconnected = True
+    monkeypatch.setattr(DummyVoiceClient, "disconnect", fake_disconnect)
+
+    # Call
+    await on_voice_state_update(
+        member=SimpleNamespace(name="leaver"),
+        before=before,
+        after=after,
+    )
+
+    # Assert we did NOT disconnect
+    assert vc._disconnected is False
