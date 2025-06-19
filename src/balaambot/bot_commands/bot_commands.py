@@ -59,4 +59,3 @@ async def setup(bot: commands.Bot) -> None:
     """Load the BotControlCommands cog."""
     logger.info("Loading BotControlCommands cog")
     await bot.add_cog(BotControlCommands(bot))
-    bot.add_listener(alert_voice_state_update, "on_voice_state_update")

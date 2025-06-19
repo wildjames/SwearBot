@@ -52,6 +52,14 @@ async def load_extensions() -> None:
             await bot.load_extension(ext_path)
 
 
+def add_listeners() -> None:
+    """Add listeners to the bot."""
+    from balaambot.discord_utils import alert_voice_state_update
+
+    # Add the voice state update listener
+    bot.add_listener(alert_voice_state_update, "on_voice_state_update")
+
+
 async def main() -> None:
     """Main async process that runs the bot."""
     # Check the token is valid
