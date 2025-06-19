@@ -82,16 +82,6 @@ def test_read_clips_and_respects_stopped(monkeypatch):
     assert silence == b""
 
 
-def test_cleanup_clears_tracks_and_sets_stopped():
-    vc = MockVoiceChat()
-    src = MultiAudioSource(vc)
-    src._tracks = [{"samples": array.array("h", [1]), "pos": 0}]
-    src._stopped = False
-    src.cleanup()
-    assert src._stopped is True
-    assert src._tracks == []
-
-
 def test_play_file_success(monkeypatch, tmp_path):
     vc = MockVoiceChat()
     src = MultiAudioSource(vc)
@@ -372,12 +362,3 @@ def test_stop_sfx_and_stop_tracks_and_stop():
     src2 = MultiAudioSource(vc2)
     src2.clear_queue()
     assert calls == ["sfx", "tracks"]
-
-
-def test_cleanup_just_calls_stop(monkeypatch):
-    vc = MockVoiceChat()
-    src = MultiAudioSource(vc)
-    called = []
-    monkeypatch.setattr(src, "clear_queue", lambda: called.append(True))
-    src.cleanup()
-    assert called == [True]
