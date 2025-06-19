@@ -4,7 +4,11 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from balaambot.discord_utils import ensure_connected, require_voice_channel
+from balaambot.discord_utils import (
+    alert_voice_state_update,
+    ensure_connected,
+    require_voice_channel,
+)
 from balaambot.sfx.audio_sfx_jobs import stop_all_jobs as sfx_stop
 from balaambot.youtube.jobs import stop as yt_stop
 
@@ -55,3 +59,4 @@ async def setup(bot: commands.Bot) -> None:
     """Load the BotControlCommands cog."""
     logger.info("Loading BotControlCommands cog")
     await bot.add_cog(BotControlCommands(bot))
+    bot.add_listener(alert_voice_state_update, "on_voice_state_update")
