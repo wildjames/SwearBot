@@ -56,7 +56,6 @@ async def load_extensions() -> None:
 
 def add_listeners() -> None:
     """Add listeners to the bot."""
-    # Add the voice state update listener
     bot.add_listener(on_voice_state_update, "on_voice_state_update")
 
 
