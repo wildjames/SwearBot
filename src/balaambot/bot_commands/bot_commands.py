@@ -5,7 +5,6 @@ from discord import app_commands
 from discord.ext import commands
 
 from balaambot.discord_utils import (
-    alert_voice_state_update,
     ensure_connected,
     require_voice_channel,
 )
