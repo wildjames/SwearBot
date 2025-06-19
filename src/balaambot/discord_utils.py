@@ -169,7 +169,7 @@ async def get_voice_channel_mixer(
     return vc, mixer
 
 
-async def alert_voice_state_update(
+async def on_voice_state_update(
     member: discord.Member,
     before: discord.VoiceState,
     after: discord.VoiceState,
