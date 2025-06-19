@@ -42,6 +42,9 @@ Sound effect files are stored in the `sounds/` directory (extracted from `sounds
 
 ### Important Makefile commands
 
+The Makefile provides convenient shortcuts for most tasks. These targets are the
+preferred way to build the project and run tests.
+
 - `make install-dev` – install development dependencies via `uv`.
 - `make lint` – run Ruff checks.
 - `make build` – build a distributable package with `uv build`.
@@ -56,6 +59,7 @@ Sound effect files are stored in the `sounds/` directory (extracted from `sounds
 
 - Follow the existing style: 4‑space indentation and line length 88 (see `ruff.toml`).
 - New features should include tests under `tests/`.
+- New features must also be documented in `README.md` at the project root.
 - Keep the `persistent/` directory out of version control – it stores runtime data such as cached audio and cat data.
 - After modifying code or documentation, run `make lint` and `make test` before committing.
 
